@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+scraper/.env
+scraper/venv/
+
+# Go
+backend/backend.exe
+backend/backend
+backend/server
+*.log
+
+# OS
+.DS_Store
+
+*.csv

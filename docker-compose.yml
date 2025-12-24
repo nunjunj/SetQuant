@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  # The Database Service
+  db:
+    image: postgres:15-alpine
+    container_name: setquant_db
+    restart: always
+    environment:
+      POSTGRES_USER: setquant_user
+      POSTGRES_PASSWORD: secret_password_123  # Change this for production!
+      POSTGRES_DB: setquant_db
+    ports:
+      - "5432:5432"  # Maps localhost:5432 -> Container:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data  # Persists data even if container dies
+
+volumes:
+  pgdata:  # The actual storage on your hard drive
