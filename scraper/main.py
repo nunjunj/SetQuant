@@ -10,7 +10,12 @@ from selenium.webdriver.common.by import By
 from sqlalchemy import create_engine, text
 
 TARGET_URL = "https://market.sec.or.th/public/idisc/th/Viewmore/r59-2?DateType=1&DateFrom=20240101&DateTo=20251231" 
-DB_URL = "postgresql://setquant_user:secret_password_123@localhost:5432/setquant_db"
+DB_URL = os.getenv("DATABASE_URL")
+
+if not DB_URL:
+    print("No DATABASE_URL found. Using Localhost...")
+    DB_URL = "postgresql://setquant_user:secret_password_123@localhost:5432/setquant_db"
+
 CSV_BACKUP_FILE = "sec_data_backup.csv"
 
 def scrape_and_clean_data():
@@ -78,6 +83,28 @@ def scrape_and_clean_data():
     finally:
         driver.quit()
 
+def load_backup_data(CSV_FILE=CSV_BACKUP_FILE):
+    if not os.path.exists(CSV_FILE):
+        print(f"Error: {CSV_FILE} not found.")
+        return None
+
+    print(f"Reading {CSV_FILE}...")
+    df = pd.read_csv(CSV_FILE)
+
+    # Ensure data types match PostgreSQL schema
+    df['volume'] = pd.to_numeric(df['volume'], errors='coerce').fillna(0).astype(int)
+    df['price'] = pd.to_numeric(df['price'], errors='coerce').fillna(0.0)
+    
+    # Handle NaNs for SQL compatibility
+    df = df.replace({np.nan: None})
+    
+    # Verify column presence
+    expected_cols = ['symbol', 'name', 'position', 'security_type', 'trade_date', 'volume', 'price', 'transaction_type', 'filing_date']
+    df = df[expected_cols]
+
+    print(f"Loaded {len(df)} rows from backup.")
+    return df
+
 def load_data_to_db(df):
     if df is None or df.empty:
         return
@@ -85,32 +112,23 @@ def load_data_to_db(df):
     print("Connecting to database...")
     engine = create_engine(DB_URL)
 
-    with engine.connect() as conn:
+    with engine.begin() as conn:
         print("Truncating table...")
         conn.execute(text("TRUNCATE TABLE sec_filings RESTART IDENTITY;"))
-        conn.commit()
         
-        print(f"Inserting {len(df)} rows...")
+        print(f"Bulk inserting {len(df)} rows...")
         
-        for index, row in df.iterrows():
-            try:
-                insert_query = text("""
-                    INSERT INTO sec_filings 
-                    (symbol, name, position, security_type, trade_date, volume, price, transaction_type, filing_date)
-                    VALUES 
-                    (:symbol, :name, :position, :security_type, :trade_date, :volume, :price, :transaction_type, :filing_date);
-                """)
-
-                conn.execute(insert_query, row.to_dict())
-                conn.commit()
-
-            except Exception as e:
-                conn.rollback()
-                print(f"Error on row {index}: {e}")
+        df.to_sql(
+            'sec_filings', 
+            conn, 
+            if_exists='append', 
+            index=False, 
+            method='multi', 
+            chunksize=1000 
+        )
         
-    print("Process complete.")
+    print("Database sync complete.")
 
 if __name__ == "__main__":
-    clean_data = scrape_and_clean_data()
-    if clean_data is not None:
-        load_data_to_db(clean_data)
+    data = load_backup_data()
+    load_data_to_db(data)

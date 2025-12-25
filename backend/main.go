@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,8 +27,12 @@ type SecFiling struct {
 var db *gorm.DB
 
 func initDB() {
-	dsn := "host=localhost user=setquant_user password=secret_password_123 dbname=setquant_db port=5432 sslmode=disable"
-	
+	dsn := os.Getenv("DATABASE_URL")
+
+	if dsn == "" {
+		dsn = "host=localhost user=setquant_user password=secret_password_123 dbname=setquant_db port=5432 sslmode=disable"
+	}
+
 	var err error
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
@@ -37,20 +42,15 @@ func initDB() {
 }
 
 func main() {
-
 	initDB()
 	router := gin.Default()
 
-	// Health Check
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "UP", "service": "setquant-go-backend"})
 	})
 
-	// --- Get Recent Market Updates  ---
 	router.GET("/api/v1/updates", func(c *gin.Context) {
 		var transactions []SecFiling
-		
-		// SQL Equivalent: SELECT * FROM sec_filings ORDER BY trade_date DESC LIMIT 50;
 		result := db.Order("trade_date desc").Limit(50).Find(&transactions)
 		
 		if result.Error != nil {
@@ -60,7 +60,6 @@ func main() {
 		c.JSON(http.StatusOK, transactions)
 	})
 
-	// --- Get Specific Stock History ---
 	router.GET("/api/v1/stock/:symbol", func(c *gin.Context) {
 		symbol := c.Param("symbol")
 		var transactions []SecFiling
@@ -73,5 +72,9 @@ func main() {
 		c.JSON(http.StatusOK, transactions)
 	})
 
-	router.Run(":8080")
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+	router.Run(":" + port)
 }
