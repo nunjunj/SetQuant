@@ -11,7 +11,7 @@ RUN go mod download
 COPY . .
 
 # Build the binary (named 'server')
-RUN go build -o server main.go
+RUN go build -o server .
 
 # 2. Run Stage (Tiny image for production)
 FROM alpine:latest
