@@ -12,7 +12,7 @@ def run_scraper_and_save():
     print("Launching browser...")
     
     options = Options()
-    # options.add_argument("--headless") 
+    options.add_argument("--headless")
     driver = webdriver.Chrome(options=options)
     
     try:
@@ -46,7 +46,8 @@ def run_scraper_and_save():
             try:
                 day, month, thai_year = date_str.split('/')
                 return f"{int(thai_year)-543}-{month}-{day}"
-            except: return None
+            except Exception:
+                return None
         df['trade_date'] = df['trade_date'].apply(convert_thai_date)
         
         df['filing_date'] = df['trade_date']

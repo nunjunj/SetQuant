@@ -4,11 +4,9 @@ from sqlalchemy import create_engine, text
 import os
 
 DB_URL = os.getenv("DATABASE_URL")
-
 if not DB_URL:
-    print("No DATABASE_URL found. Using Localhost...")
-    DB_URL = "postgresql://setquant_user:secret_password_123@localhost:5432/setquant_db"
-    
+    raise SystemExit("DATABASE_URL is not set. See .env.example.")
+
 CSV_FILE = "latest_sec_data.csv"
 
 def ingest_csv_to_db():
