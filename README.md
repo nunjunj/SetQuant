@@ -4,10 +4,6 @@ Insider-trading tracker for the Stock Exchange of Thailand. It scrapes SEC filin
 compares what executives buy and sell against the stock's actual price, and shows a
 feed, a leaderboard, and per-stock charts.
 
-Live demo: _add your Vercel URL here_
-
-<!-- Add a screenshot at docs/samples/app-screenshot.png and link it here. -->
-
 ## How it works
 
 A scraper pulls the filings daily into Postgres, and a scoring job uses Yahoo Finance
