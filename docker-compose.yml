@@ -7,13 +7,45 @@ services:
     container_name: setquant_db
     restart: always
     environment:
-      POSTGRES_USER: setquant_user
-      POSTGRES_PASSWORD: secret_password_123  # Change this for production!
-      POSTGRES_DB: setquant_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"  # Maps localhost:5432 -> Container:5432
     volumes:
       - pgdata:/var/lib/postgresql/data  # Persists data even if container dies
+
+  # The Backend API Service
+  backend:
+    build: ./backend
+    container_name: setquant_backend
+    restart: always
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      PORT: "8080"
+      WEBHOOK_SECRET: ${WEBHOOK_SECRET}
+      APP_ENV: ${APP_ENV}
+      TWITTER_API_KEY: ${TWITTER_API_KEY}
+      TWITTER_API_SECRET: ${TWITTER_API_SECRET}
+      TWITTER_ACCESS_TOKEN: ${TWITTER_ACCESS_TOKEN}
+      TWITTER_ACCESS_SECRET: ${TWITTER_ACCESS_SECRET}
+    ports:
+      - "8080:8080"  # Maps localhost:8080 -> Container:8080
+    depends_on:
+      - db  # Wait for database to be available
+
+  # The Frontend Service
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: "http://backend:8080"
+    container_name: setquant_frontend
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
 
 volumes:
   pgdata:  # The actual storage on your hard drive

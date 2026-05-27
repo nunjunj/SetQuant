@@ -1,8 +1,14 @@
+# Secrets
+.env
+
 # Python
 __pycache__/
 *.pyc
 scraper/.env
 scraper/venv/
+
+# Generated scraper artifacts (chart PNGs); samples live in docs/samples/
+scraper/output/
 
 # Go
 backend/backend.exe
@@ -14,3 +20,13 @@ backend/server
 .DS_Store
 
 *.csv
+
+# Next.js
+frontend/.next/
+frontend/node_modules/
+frontend/.env.local
+
+# Local-only notes (not part of the public repo)
+CLAUDE.md
+polish.md
+DEPLOYMENT.md
