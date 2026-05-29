@@ -3,7 +3,7 @@
 import TransactionBadge from './TransactionBadge';
 import TagBadge from './TagBadge';
 import InsightChip from './InsightChip';
-import { formatTHB, formatVolume, formatDate } from '@/lib/formatters';
+import { formatTHB, formatVolume, formatDate, formatPrice } from '@/lib/formatters';
 import type { FilingInsight } from '@/lib/insight';
 import type { SecFiling } from '@/lib/types';
 
@@ -45,10 +45,12 @@ export default function TradeRow({ filing, isSelected, onClick, insight, derived
       {/* Badge */}
       <TransactionBadge transactionType={filing.transaction_type} />
 
-      {/* Volume */}
+      {/* Value · volume @ per-share price */}
       <div className="text-right flex-shrink-0 hidden sm:block">
         <p className="text-sm font-medium text-slate-700 tabular-nums">{formatTHB(value)}</p>
-        <p className="text-xs text-slate-400 tabular-nums">{formatVolume(filing.volume)} sh</p>
+        <p className="text-xs text-slate-400 tabular-nums">
+          {formatVolume(filing.volume)} @ {formatPrice(filing.price)}
+        </p>
       </div>
 
       {/* Date */}

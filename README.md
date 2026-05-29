@@ -1,6 +1,6 @@
 # SetQuant
 
-Insider-trading tracker for the Stock Exchange of Thailand. It scrapes SEC filings,
+Insider-filings tracker for the Stock Exchange of Thailand. It scrapes SEC filings,
 compares what executives buy and sell against the stock's actual price, and shows a
 feed, a leaderboard, and per-stock charts.
 

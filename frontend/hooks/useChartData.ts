@@ -10,7 +10,11 @@ async function fetcher(url: string): Promise<CandlestickBar[]> {
 
 export function useChartData(symbol: string | null) {
   const hasDummy = symbol ? symbol in DUMMY_CANDLES : false;
-  const fallback = symbol ? (DUMMY_CANDLES[symbol] ?? DUMMY_CANDLES['PTT']) : DUMMY_CANDLES['PTT'];
+  // Fall back to PTT's candles ONLY when the requested symbol has its own
+  // dummy entry — otherwise the SET index (symbol `^SET`) and any non-dummy
+  // ticker like SPALI/CRC would briefly render PTT's candles while the real
+  // /api/chart/<symbol> response is in flight.
+  const fallback = hasDummy && symbol ? DUMMY_CANDLES[symbol] : [];
 
   const { data, isLoading } = useSWR<CandlestickBar[]>(
     symbol ? `/api/chart/${symbol}` : null,

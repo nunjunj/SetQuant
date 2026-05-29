@@ -42,7 +42,7 @@ export default function Header() {
         </div>
         <span className="font-semibold text-slate-800 tracking-tight">SetQuant</span>
         <span className="text-slate-300 text-sm hidden sm:inline">·</span>
-        <span className="text-slate-400 text-sm hidden sm:inline">Thai Insider Trading</span>
+        <span className="text-slate-400 text-sm hidden sm:inline">Thai Insider Filings</span>
       </div>
 
       {/* Spacer */}
