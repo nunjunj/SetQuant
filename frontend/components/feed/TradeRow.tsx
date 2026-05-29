@@ -2,16 +2,21 @@
 
 import TransactionBadge from './TransactionBadge';
 import TagBadge from './TagBadge';
+import InsightChip from './InsightChip';
 import { formatTHB, formatVolume, formatDate } from '@/lib/formatters';
+import type { FilingInsight } from '@/lib/insight';
 import type { SecFiling } from '@/lib/types';
 
 interface TradeRowProps {
   filing: SecFiling;
   isSelected: boolean;
   onClick: () => void;
+  insight?: FilingInsight | null;
+  /** Tag ids derived from the insider's CeoScore (e.g. accumulator / distributor). */
+  derivedTags?: string[];
 }
 
-export default function TradeRow({ filing, isSelected, onClick }: TradeRowProps) {
+export default function TradeRow({ filing, isSelected, onClick, insight, derivedTags }: TradeRowProps) {
   const value = filing.volume * filing.price;
 
   return (
@@ -31,6 +36,8 @@ export default function TradeRow({ filing, isSelected, onClick }: TradeRowProps)
         <p className="text-sm font-medium text-slate-800 truncate">{filing.name}</p>
         <div className="flex items-center gap-1.5 mt-0.5">
           <p className="text-xs text-slate-400 truncate">{filing.position}</p>
+          {insight && <InsightChip insight={insight} />}
+          {derivedTags?.map((t) => <TagBadge key={`d-${t}`} tagId={t} />)}
           {filing.tags?.map((t) => <TagBadge key={t} tagId={t} />)}
         </div>
       </div>

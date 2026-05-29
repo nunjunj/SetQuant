@@ -92,10 +92,33 @@ func main() {
 	})
 
 	router.GET("/api/v1/updates", func(c *gin.Context) {
+		// `tier` constrains the response to filings by top-N leaderboard insiders.
+		// ALL (or invalid) returns the latest 50 filings unconstrained — matching
+		// the previous behaviour. TOP_50 / TOP_10 walk further back in time so the
+		// feed always shows up to 50 trades by qualifying insiders, however rare.
+		var tierLimit int
+		switch c.Query("tier") {
+		case "TOP_10":
+			tierLimit = 10
+		case "TOP_50":
+			tierLimit = 50
+		default:
+			tierLimit = 0 // ALL or invalid
+		}
+
+		q := db.Order("trade_date desc").Limit(50)
+		if tierLimit > 0 {
+			// `id asc` is a deterministic tiebreaker — without it, two scores tied
+			// at the boundary could shuffle the subquery's result set per call.
+			topQ := db.Model(&CeoScore{}).
+				Select("symbol, name").
+				Order("combined_return_pct desc, id asc").
+				Limit(tierLimit)
+			q = q.Where("(symbol, name) IN (?)", topQ)
+		}
+
 		var transactions []SecFiling
-		result := db.Order("trade_date desc").Limit(50).Find(&transactions)
-		
-		if result.Error != nil {
+		if result := q.Find(&transactions); result.Error != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
 			return
 		}

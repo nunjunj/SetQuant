@@ -15,12 +15,14 @@ export interface SecFiling {
 export type TransactionFilter = 'ALL' | 'BUY' | 'SELL';
 export type DateRangeFilter = 'ALL' | 'TODAY' | '7D' | '30D';
 export type ValueFilter = 'ALL' | '1M' | '10M';
+export type InsiderTierFilter = 'ALL' | 'TOP_50' | 'TOP_10';
 
 export interface FilterState {
   search: string;
   transaction: TransactionFilter;
   dateRange: DateRangeFilter;
   minValue: ValueFilter;
+  insiderTier: InsiderTierFilter;
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -28,6 +30,7 @@ export const DEFAULT_FILTERS: FilterState = {
   transaction: 'ALL',
   dateRange: 'ALL',
   minValue: 'ALL',
+  insiderTier: 'ALL',
 };
 
 export interface CeoScore {

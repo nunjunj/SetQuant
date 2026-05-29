@@ -1,5 +1,5 @@
 import { DUMMY_FILINGS, DUMMY_CEO_SCORES } from './dummy-data';
-import type { SecFiling, CeoScore, TradeMarker } from './types';
+import type { SecFiling, CeoScore, TradeMarker, InsiderTierFilter } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
 const USE_REAL_API = Boolean(API_URL);
@@ -15,8 +15,11 @@ async function safeFetch<T>(url: string, fallback: T): Promise<T> {
   }
 }
 
-export async function fetchUpdates(): Promise<SecFiling[]> {
-  return safeFetch<SecFiling[]>(`${API_URL}/api/v1/updates`, DUMMY_FILINGS);
+export async function fetchUpdates(tier: InsiderTierFilter = 'ALL'): Promise<SecFiling[]> {
+  // Omit the querystring on ALL so we keep hitting the same Next.js cache key
+  // the previous build used — avoids cold-cache after deploy.
+  const qs = tier === 'ALL' ? '' : `?tier=${tier}`;
+  return safeFetch<SecFiling[]>(`${API_URL}/api/v1/updates${qs}`, DUMMY_FILINGS);
 }
 
 export async function fetchScores(): Promise<CeoScore[]> {

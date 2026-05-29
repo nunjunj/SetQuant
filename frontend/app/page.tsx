@@ -12,6 +12,7 @@ import { useScores } from '@/hooks/useScores';
 import { useStockDetail } from '@/hooks/useStockDetail';
 import { useKeyboardNav } from '@/hooks/useKeyboardNav';
 import { isBuy } from '@/lib/formatters';
+import { buildDerivedTags, buildInsights, buildRankLookup } from '@/lib/insight';
 import { DEFAULT_FILTERS, type FilterState } from '@/lib/types';
 
 export default function Home() {
@@ -19,7 +20,7 @@ export default function Home() {
   const [selectedCeoName, setSelectedCeoName] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
-  const { filings, isLoading: feedLoading } = useUpdates();
+  const { filings, isLoading: feedLoading } = useUpdates(filters.insiderTier);
   const { scores, isLoading: scoresLoading } = useScores();
   const { filings: detailFilings } = useStockDetail(selectedSymbol);
 
@@ -37,6 +38,10 @@ export default function Home() {
     setSelectedSymbol(null);
     setSelectedCeoName(null);
   }, []);
+
+  // Insider rank lookup (symbol|name → 1-based rank) — used by the tier filter
+  // and shared with buildInsights so both agree on what "Top 50" means.
+  const rankByKey = useMemo(() => buildRankLookup(scores), [scores]);
 
   const filteredFilings = useMemo(() => {
     let result = filings;
@@ -71,8 +76,17 @@ export default function Home() {
       result = result.filter((f) => f.volume * f.price >= threshold);
     }
 
+    // Insider tier is now applied server-side via useUpdates(filters.insiderTier),
+    // so filteredFilings only handles client-only criteria (search, transaction,
+    // date range, min value).
+
     return result;
   }, [filings, filters]);
+
+  // Computed off the *unfiltered* feed so dedup decisions ("show on newest
+  // filing per insider") don't shift when the user toggles sidebar filters.
+  const insightMap = useMemo(() => buildInsights(filings, scores), [filings, scores]);
+  const derivedTagsMap = useMemo(() => buildDerivedTags(filings, scores), [filings, scores]);
 
   const selectedScore = selectedCeoName
     ? scores.find((s) => s.symbol === selectedSymbol && s.name === selectedCeoName)
@@ -108,6 +122,8 @@ export default function Home() {
           selectedSymbol={selectedSymbol}
           selectedCeoName={selectedCeoName}
           onSelect={handleSelect}
+          insightMap={insightMap}
+          derivedTagsMap={derivedTagsMap}
         />
       </div>
 

@@ -1,6 +1,6 @@
 'use client';
 
-import type { FilterState, TransactionFilter, DateRangeFilter, ValueFilter } from '@/lib/types';
+import type { FilterState, TransactionFilter, DateRangeFilter, ValueFilter, InsiderTierFilter } from '@/lib/types';
 
 interface FilterSidebarProps {
   filters: FilterState;
@@ -75,6 +75,22 @@ export default function FilterSidebar({ filters, onFiltersChange }: FilterSideba
           ]}
           value={filters.transaction}
           onChange={(v) => set('transaction', v)}
+        />
+      </div>
+
+      <div className="border-t border-slate-100" />
+
+      {/* Insider Tier — filters to filings by top-ranked insiders only */}
+      <div className="px-4 py-4 space-y-2.5">
+        <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Insider Tier</p>
+        <PillGroup<InsiderTierFilter>
+          options={[
+            { value: 'ALL', label: 'All' },
+            { value: 'TOP_50', label: 'Top 50' },
+            { value: 'TOP_10', label: 'Top 10' },
+          ]}
+          value={filters.insiderTier}
+          onChange={(v) => set('insiderTier', v)}
         />
       </div>
 

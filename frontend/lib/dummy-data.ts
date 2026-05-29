@@ -47,8 +47,10 @@ export const DUMMY_FILINGS: SecFiling[] = [
     transaction_type: 'ซื้อ', filing_date: '2026-02-17',
   },
   {
-    id: 9, symbol: 'SCB', name: 'Arthid Nanthawithaya', position: 'Chief Executive Officer',
-    security_type: 'หุ้นสามัญ', trade_date: '2026-02-14', volume: 250000, price: 102.50,
+    // Paired with id 4 to demo the 📉 2nd sale streak chip (no score row exists
+    // for Chanvit, so the rank/conviction priorities don't fire).
+    id: 9, symbol: 'DELTA', name: 'Chanvit Assavapokee', position: 'กรรมการ',
+    security_type: 'หุ้นสามัญ', trade_date: '2026-02-14', volume: 120000, price: 51.75,
     transaction_type: 'จำหน่าย', filing_date: '2026-02-17',
   },
   {
@@ -63,8 +65,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 1, name: 'Prasert Prasarttong-Osoth', symbol: 'BDMS',
     total_bought_thb: 28920000, total_sold_thb: 0,
-    buy_return_pct: 34.2, sell_return_pct: 0, combined_return_pct: 34.2,
-    stock_1y_pct: 18.5, buy_count: 12, sell_count: 0,
+    buy_return_pct: 0.342, sell_return_pct: 0, combined_return_pct: 0.342,
+    stock_1y_pct: 0.185, buy_count: 12, sell_count: 0,
     latest_action: 'BOUGHT', latest_volume_thb: 28920000, latest_price: 24.10,
     net_position_6m: 'LONG', net_volume_thb_6m: 28920000, avg_price_6m: 22.30,
     trade_count_6m: 7, latest_trade_date: '2026-02-18', calculated_at: '2026-02-18T08:00:00Z',
@@ -72,8 +74,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 2, name: 'Somchai Lertsutiwong', symbol: 'ADVANC',
     total_bought_thb: 32700000, total_sold_thb: 5000000,
-    buy_return_pct: 28.5, sell_return_pct: 12.3, combined_return_pct: 24.8,
-    stock_1y_pct: 22.1, buy_count: 8, sell_count: 2,
+    buy_return_pct: 0.285, sell_return_pct: 0.123, combined_return_pct: 0.248,
+    stock_1y_pct: 0.221, buy_count: 8, sell_count: 2,
     latest_action: 'BOUGHT', latest_volume_thb: 32700000, latest_price: 218.00,
     net_position_6m: 'LONG', net_volume_thb_6m: 27700000, avg_price_6m: 205.50,
     trade_count_6m: 5, latest_trade_date: '2026-02-19', calculated_at: '2026-02-19T08:00:00Z',
@@ -81,8 +83,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 3, name: 'Auttapol Rerkpiboon', symbol: 'PTT',
     total_bought_thb: 40250000, total_sold_thb: 12000000,
-    buy_return_pct: 18.7, sell_return_pct: 8.2, combined_return_pct: 15.9,
-    stock_1y_pct: 5.3, buy_count: 15, sell_count: 4,
+    buy_return_pct: 0.187, sell_return_pct: 0.082, combined_return_pct: 0.159,
+    stock_1y_pct: 0.053, buy_count: 15, sell_count: 4,
     latest_action: 'BOUGHT', latest_volume_thb: 16250000, latest_price: 32.50,
     net_position_6m: 'LONG', net_volume_thb_6m: 22000000, avg_price_6m: 30.20,
     trade_count_6m: 9, latest_trade_date: '2026-02-20', calculated_at: '2026-02-20T08:00:00Z',
@@ -90,8 +92,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 4, name: 'Nitinai Sirismatthakarn', symbol: 'AOT',
     total_bought_thb: 18525000, total_sold_thb: 0,
-    buy_return_pct: 12.4, sell_return_pct: 0, combined_return_pct: 12.4,
-    stock_1y_pct: 9.8, buy_count: 6, sell_count: 0,
+    buy_return_pct: 0.124, sell_return_pct: 0, combined_return_pct: 0.124,
+    stock_1y_pct: 0.098, buy_count: 6, sell_count: 0,
     latest_action: 'BOUGHT', latest_volume_thb: 18525000, latest_price: 61.75,
     net_position_6m: 'LONG', net_volume_thb_6m: 18525000, avg_price_6m: 59.00,
     trade_count_6m: 4, latest_trade_date: '2026-02-17', calculated_at: '2026-02-17T08:00:00Z',
@@ -99,8 +101,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 5, name: 'Korsak Chairasmisak', symbol: 'CPALL',
     total_bought_thb: 22400000, total_sold_thb: 8000000,
-    buy_return_pct: 9.1, sell_return_pct: 5.5, combined_return_pct: 7.8,
-    stock_1y_pct: 11.2, buy_count: 9, sell_count: 3,
+    buy_return_pct: 0.091, sell_return_pct: 0.055, combined_return_pct: 0.078,
+    stock_1y_pct: 0.112, buy_count: 9, sell_count: 3,
     latest_action: 'BOUGHT', latest_volume_thb: 22400000, latest_price: 56.00,
     net_position_6m: 'LONG', net_volume_thb_6m: 14400000, avg_price_6m: 53.80,
     trade_count_6m: 6, latest_trade_date: '2026-02-14', calculated_at: '2026-02-14T08:00:00Z',
@@ -108,8 +110,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 6, name: 'Sarath Ratanavadi', symbol: 'GULF',
     total_bought_thb: 10000000, total_sold_thb: 77000000,
-    buy_return_pct: 4.2, sell_return_pct: -3.8, combined_return_pct: -1.5,
-    stock_1y_pct: -8.4, buy_count: 3, sell_count: 11,
+    buy_return_pct: 0.042, sell_return_pct: -0.038, combined_return_pct: -0.015,
+    stock_1y_pct: -0.084, buy_count: 3, sell_count: 11,
     latest_action: 'SOLD', latest_volume_thb: 77000000, latest_price: 38.50,
     net_position_6m: 'SHORT', net_volume_thb_6m: -67000000, avg_price_6m: 40.10,
     trade_count_6m: 8, latest_trade_date: '2026-02-17', calculated_at: '2026-02-17T08:00:00Z',
@@ -117,8 +119,8 @@ export const DUMMY_CEO_SCORES: CeoScore[] = [
   {
     id: 7, name: 'Kattiya Indaravijaya', symbol: 'KBANK',
     total_bought_thb: 5000000, total_sold_thb: 27600000,
-    buy_return_pct: 2.1, sell_return_pct: -8.9, combined_return_pct: -5.4,
-    stock_1y_pct: -3.2, buy_count: 2, sell_count: 7,
+    buy_return_pct: 0.021, sell_return_pct: -0.089, combined_return_pct: -0.054,
+    stock_1y_pct: -0.032, buy_count: 2, sell_count: 7,
     latest_action: 'SOLD', latest_volume_thb: 27600000, latest_price: 138.00,
     net_position_6m: 'SHORT', net_volume_thb_6m: -22600000, avg_price_6m: 142.00,
     trade_count_6m: 5, latest_trade_date: '2026-02-19', calculated_at: '2026-02-19T08:00:00Z',
