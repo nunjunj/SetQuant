@@ -11,8 +11,9 @@ import { useUpdates } from '@/hooks/useUpdates';
 import { useScores } from '@/hooks/useScores';
 import { useStockDetail } from '@/hooks/useStockDetail';
 import { useKeyboardNav } from '@/hooks/useKeyboardNav';
-import { isBuy } from '@/lib/formatters';
-import { buildDerivedTags, buildInsights, buildRankLookup } from '@/lib/insight';
+import { IS_DEMO_MODE } from '@/lib/api';
+import { getTxSide, shiftDateKey, toDateKey } from '@/lib/formatters';
+import { buildDerivedTags, buildInsights } from '@/lib/insight';
 import { DEFAULT_FILTERS, type FilterState } from '@/lib/types';
 
 export default function Home() {
@@ -20,9 +21,16 @@ export default function Home() {
   const [selectedCeoName, setSelectedCeoName] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
 
-  const { filings, isLoading: feedLoading } = useUpdates(filters.insiderTier);
-  const { scores, isLoading: scoresLoading } = useScores();
+  const { filings: rawFilings, isLoading: feedLoading, error: feedError } = useUpdates(filters.insiderTier);
+  const { scores, isLoading: scoresLoading, error: scoresError } = useScores();
   const { filings: detailFilings } = useStockDetail(selectedSymbol);
+
+  // Rows with a zero/absent volume or price carry no economic information and
+  // would poison the aggregate totals — drop them before anything else.
+  const filings = useMemo(
+    () => rawFilings.filter((f) => f.volume > 0 && f.price > 0),
+    [rawFilings],
+  );
 
   const handleSelect = useCallback((symbol: string, name: string) => {
     if (selectedSymbol === symbol && selectedCeoName === name) {
@@ -34,14 +42,31 @@ export default function Home() {
     }
   }, [selectedSymbol, selectedCeoName]);
 
+  // Keyboard navigation must never toggle the panel shut when it lands on the
+  // currently selected row — it selects outright.
+  const handleKeyboardSelect = useCallback((symbol: string, name: string) => {
+    setSelectedSymbol(symbol);
+    setSelectedCeoName(name);
+  }, []);
+
   const handleClose = useCallback(() => {
     setSelectedSymbol(null);
     setSelectedCeoName(null);
   }, []);
 
-  // Insider rank lookup (symbol|name → 1-based rank) — used by the tier filter
-  // and shared with buildInsights so both agree on what "Top 50" means.
-  const rankByKey = useMemo(() => buildRankLookup(scores), [scores]);
+  const handleClearFilters = useCallback(() => setFilters(DEFAULT_FILTERS), []);
+
+  // Date filters are anchored to the newest trade date actually present in the
+  // data, not the browser clock: the dataset refreshes daily and routinely lags
+  // "today", which would otherwise empty the feed. All comparisons are on
+  // YYYY-MM-DD prefixes, so no timezone can shift a row across a boundary.
+  const latestDateKey = useMemo(
+    () => filings.reduce((max, f) => {
+      const key = toDateKey(f.trade_date);
+      return key > max ? key : max;
+    }, ''),
+    [filings],
+  );
 
   const filteredFilings = useMemo(() => {
     let result = filings;
@@ -54,20 +79,17 @@ export default function Home() {
       );
     }
 
-    // Transaction type
+    // Transaction type — transfers are neither buy nor sell, so they are
+    // excluded from both sides and only visible under "All".
     if (filters.transaction !== 'ALL') {
-      result = result.filter((f) =>
-        filters.transaction === 'BUY' ? isBuy(f.transaction_type) : !isBuy(f.transaction_type),
-      );
+      result = result.filter((f) => getTxSide(f.transaction_type) === filters.transaction);
     }
 
-    // Date range
-    if (filters.dateRange !== 'ALL') {
-      const cutoff = new Date();
-      if (filters.dateRange === 'TODAY') cutoff.setHours(0, 0, 0, 0);
-      else if (filters.dateRange === '7D') cutoff.setDate(cutoff.getDate() - 7);
-      else if (filters.dateRange === '30D') cutoff.setDate(cutoff.getDate() - 30);
-      result = result.filter((f) => new Date(f.trade_date) >= cutoff);
+    // Date range, relative to the newest filing in the feed
+    if (filters.dateRange !== 'ALL' && latestDateKey) {
+      const days = filters.dateRange === 'TODAY' ? 0 : filters.dateRange === '7D' ? 7 : 30;
+      const cutoff = days === 0 ? latestDateKey : shiftDateKey(latestDateKey, -days);
+      result = result.filter((f) => toDateKey(f.trade_date) >= cutoff);
     }
 
     // Min value
@@ -76,12 +98,19 @@ export default function Home() {
       result = result.filter((f) => f.volume * f.price >= threshold);
     }
 
-    // Insider tier is now applied server-side via useUpdates(filters.insiderTier),
+    // Insider tier is applied server-side via useUpdates(filters.insiderTier),
     // so filteredFilings only handles client-only criteria (search, transaction,
     // date range, min value).
 
     return result;
-  }, [filings, filters]);
+  }, [filings, filters, latestDateKey]);
+
+  const hasActiveFilters =
+    filters.search.trim() !== '' ||
+    filters.transaction !== 'ALL' ||
+    filters.dateRange !== 'ALL' ||
+    filters.minValue !== 'ALL' ||
+    filters.insiderTier !== 'ALL';
 
   // Computed off the *unfiltered* feed so dedup decisions ("show on newest
   // filing per insider") don't shift when the user toggles sidebar filters.
@@ -95,9 +124,13 @@ export default function Home() {
   useKeyboardNav({
     items: filteredFilings,
     selectedSymbol,
-    onSelect: (symbol) => handleSelect(symbol, filteredFilings.find((f) => f.symbol === symbol)?.name ?? ''),
+    selectedCeoName,
+    onSelect: handleKeyboardSelect,
     onClose: handleClose,
   });
+
+  // In demo mode there is no live source to fail, so never claim one did.
+  const showError = !IS_DEMO_MODE && Boolean(feedError || scoresError);
 
   return (
     <AppShell
@@ -114,6 +147,16 @@ export default function Home() {
     >
       {/* Scroll layer for the page content — sits behind the detail panel. */}
       <div className="absolute inset-0 overflow-y-auto">
+        {showError && (
+          <div
+            role="status"
+            className="flex items-center gap-2 px-4 py-2 border-b border-amber-100 bg-amber-50/70"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 flex-shrink-0" />
+            <span className="text-xs text-amber-800">Live data unavailable — retrying</span>
+          </div>
+        )}
+
         <MarketSentimentChart />
 
         <TradeFeed
@@ -124,6 +167,8 @@ export default function Home() {
           onSelect={handleSelect}
           insightMap={insightMap}
           derivedTagsMap={derivedTagsMap}
+          hasActiveFilters={hasActiveFilters}
+          onClearFilters={handleClearFilters}
         />
       </div>
 

@@ -1,5 +1,5 @@
 import useSWR from 'swr';
-import { fetchUpdates } from '@/lib/api';
+import { fetchUpdates, IS_DEMO_MODE } from '@/lib/api';
 import { DUMMY_FILINGS } from '@/lib/dummy-data';
 import type { InsiderTierFilter, SecFiling } from '@/lib/types';
 
@@ -8,8 +8,11 @@ export function useUpdates(tier: InsiderTierFilter = 'ALL') {
     ['updates', tier],
     () => fetchUpdates(tier),
     {
-      refreshInterval: 60_000,
-      fallbackData: DUMMY_FILINGS,
+      // Filings land once a day; polling every minute was pure noise.
+      refreshInterval: 300_000,
+      // Only seed dummies when there is no backend — otherwise a real failure
+      // would masquerade as live data.
+      fallbackData: IS_DEMO_MODE ? DUMMY_FILINGS : undefined,
       // Hold the previous tier's rows while the new fetch is in flight so
       // toggling the filter doesn't blink the feed empty.
       keepPreviousData: true,
@@ -17,7 +20,7 @@ export function useUpdates(tier: InsiderTierFilter = 'ALL') {
   );
 
   return {
-    filings: data ?? DUMMY_FILINGS,
+    filings: data ?? (IS_DEMO_MODE ? DUMMY_FILINGS : []),
     isLoading,
     error,
   };

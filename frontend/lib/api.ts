@@ -1,18 +1,21 @@
 import { DUMMY_FILINGS, DUMMY_CEO_SCORES } from './dummy-data';
+import { getTxSide, toDateKey } from './formatters';
 import type { SecFiling, CeoScore, TradeMarker, InsiderTierFilter } from './types';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? '';
-const USE_REAL_API = Boolean(API_URL);
+
+/**
+ * True when no backend is configured. In demo mode every fetcher resolves to
+ * the bundled dummy dataset; in real mode failures throw so SWR can surface an
+ * error instead of quietly showing fake data as if it were live.
+ */
+export const IS_DEMO_MODE = !API_URL;
 
 async function safeFetch<T>(url: string, fallback: T): Promise<T> {
-  if (!USE_REAL_API) return fallback;
-  try {
-    const res = await fetch(url, { next: { revalidate: 60 } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json() as Promise<T>;
-  } catch {
-    return fallback;
-  }
+  if (IS_DEMO_MODE) return fallback;
+  const res = await fetch(url, { next: { revalidate: 60 } });
+  if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
+  return res.json() as Promise<T>;
 }
 
 export async function fetchUpdates(tier: InsiderTierFilter = 'ALL'): Promise<SecFiling[]> {
@@ -35,13 +38,15 @@ export function getMarkers(symbol: string, filings: SecFiling[]): TradeMarker[] 
   return filings
     .filter((f) => f.symbol === symbol)
     .map((f) => {
-      const buy = f.transaction_type.match(/ซื้อ|ได้มา|buy/i);
+      const side = getTxSide(f.transaction_type);
+      const buy = side === 'BUY';
+      const other = side === 'OTHER';
       return {
-        time: f.trade_date.slice(0, 10),
+        time: toDateKey(f.trade_date),
         position: (buy ? 'belowBar' : 'aboveBar') as TradeMarker['position'],
-        color: buy ? '#10b981' : '#f43f5e',
-        shape: (buy ? 'arrowUp' : 'arrowDown') as TradeMarker['shape'],
-        text: buy ? 'B' : 'S',
+        color: other ? '#94a3b8' : buy ? '#10b981' : '#f43f5e',
+        shape: (other ? 'circle' : buy ? 'arrowUp' : 'arrowDown') as TradeMarker['shape'],
+        text: other ? 'T' : buy ? 'B' : 'S',
       };
     })
     .sort((a, b) => a.time.localeCompare(b.time));

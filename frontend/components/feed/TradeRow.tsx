@@ -22,6 +22,7 @@ export default function TradeRow({ filing, isSelected, onClick, insight, derived
   return (
     <button
       onClick={onClick}
+      data-row-key={`${filing.symbol}|${filing.name}`}
       className={`group w-full flex items-center gap-3 px-4 py-3 text-left transition-colors cursor-pointer hover:bg-slate-50 border-b border-slate-50 ${
         isSelected ? 'bg-slate-50 border-l-2 border-l-emerald-400' : ''
       }`}
