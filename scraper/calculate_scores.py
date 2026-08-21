@@ -378,8 +378,66 @@ def filter_market_prices(df: pd.DataFrame, close: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+
+INDEX_SYMBOL = '^SET'
+
+def store_index_candles(engine):
+    """Persist 1y of daily SET-index OHLC so the API can serve the chart.
+
+    Yahoo blocks index-chart requests from datacenter IPs (Vercel/Cloud Run),
+    so the frontend cannot proxy ^SET at runtime. This job runs from an IP
+    Yahoo accepts; the frontend falls back to GET /api/v1/candles/^SET.
+    """
+    raw = yf.download(f"{INDEX_SYMBOL}.BK", period="1y", interval="1d",
+                      auto_adjust=False, progress=False)
+    if raw is None or raw.empty:
+        print("WARNING: no index candles from yfinance; keeping existing rows.")
+        return
+    if isinstance(raw.columns, pd.MultiIndex):
+        raw.columns = raw.columns.get_level_values(0)
+    df = raw[['Open', 'High', 'Low', 'Close']].dropna()
+
+    with engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS index_candles (
+                symbol TEXT NOT NULL,
+                time   DATE NOT NULL,
+                open   NUMERIC NOT NULL,
+                high   NUMERIC NOT NULL,
+                low    NUMERIC NOT NULL,
+                close  NUMERIC NOT NULL,
+                PRIMARY KEY (symbol, time)
+            )
+        """))
+        rows = [
+            {
+                'symbol': INDEX_SYMBOL,
+                'time': ts.date(),
+                'open': round(float(r['Open']), 2),
+                'high': round(float(r['High']), 2),
+                'low': round(float(r['Low']), 2),
+                'close': round(float(r['Close']), 2),
+            }
+            for ts, r in df.iterrows()
+        ]
+        conn.execute(text("""
+            INSERT INTO index_candles (symbol, time, open, high, low, close)
+            VALUES (:symbol, :time, :open, :high, :low, :close)
+            ON CONFLICT (symbol, time) DO UPDATE SET
+                open = EXCLUDED.open, high = EXCLUDED.high,
+                low = EXCLUDED.low, close = EXCLUDED.close
+        """), rows)
+        # Keep a rolling ~1y window.
+        conn.execute(text(
+            "DELETE FROM index_candles WHERE symbol = :s AND time < CURRENT_DATE - 370"
+        ), {'s': INDEX_SYMBOL})
+    print(f"Stored {len(rows)} index candles for {INDEX_SYMBOL}.")
+
+
 def main():
     engine = create_engine(require_db_url())
+
+    store_index_candles(engine)
 
     # Drop stale columns from previous schema
     with engine.begin() as conn:

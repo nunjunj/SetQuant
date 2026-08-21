@@ -98,6 +98,27 @@ async function fetchWithCrumb(ticker: string): Promise<CandlestickBar[]> {
   }
 }
 
+/**
+ * Last-resort source: index candles persisted in our own Postgres by the
+ * daily pipeline (which fetches Yahoo from an IP it accepts) and served by
+ * the Go API. Removes the runtime Yahoo dependency for ^-symbols entirely.
+ */
+async function fetchFromBackend(symbol: string): Promise<CandlestickBar[]> {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (!apiUrl) return [];
+  try {
+    const res = await fetch(
+      `${apiUrl}/api/v1/candles/${encodeURIComponent(symbol)}`,
+      { cache: 'no-store' },
+    );
+    if (!res.ok) return [];
+    const data = (await res.json()) as CandlestickBar[];
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ symbol: string }> },
@@ -155,6 +176,13 @@ export async function GET(
         const crumbCandles = await fetchWithCrumb(ticker);
         if (crumbCandles.length > candles.length) {
           candles = crumbCandles;
+        }
+      }
+
+      if (candles.length < MIN_VALID_CANDLES) {
+        const dbCandles = await fetchFromBackend(symbol);
+        if (dbCandles.length > candles.length) {
+          candles = dbCandles;
         }
       }
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/subtle"
+	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -34,6 +35,32 @@ type SecFiling struct {
 
 // CeoScore holds pre-calculated mark-to-market metrics per executive/symbol pair.
 // Populated daily by scraper/calculate_scores.py.
+type IndexCandle struct {
+	Symbol string    `gorm:"primaryKey" json:"-"`
+	Time   time.Time `gorm:"primaryKey" json:"-"`
+	Open   float64   `json:"open"`
+	High   float64   `json:"high"`
+	Low    float64   `json:"low"`
+	Close  float64   `json:"close"`
+}
+
+// MarshalJSON flattens Time to the YYYY-MM-DD string lightweight-charts wants.
+func (ic IndexCandle) MarshalJSON() ([]byte, error) {
+	type alias struct {
+		Time  string  `json:"time"`
+		Open  float64 `json:"open"`
+		High  float64 `json:"high"`
+		Low   float64 `json:"low"`
+		Close float64 `json:"close"`
+	}
+	return json.Marshal(alias{
+		Time: ic.Time.Format("2006-01-02"),
+		Open: ic.Open, High: ic.High, Low: ic.Low, Close: ic.Close,
+	})
+}
+
+func (IndexCandle) TableName() string { return "index_candles" }
+
 type CeoScore struct {
 	ID                uint      `gorm:"primaryKey" json:"id"`
 	Name              string    `gorm:"uniqueIndex:idx_ceo_symbol;not null" json:"name"`
@@ -177,6 +204,21 @@ func main() {
 			return
 		}
 		c.JSON(http.StatusOK, scores)
+	})
+
+	// Daily OHLC for the SET index, populated by the scraper pipeline —
+	// Yahoo blocks index-chart requests from datacenter IPs, so the frontend
+	// falls back to this endpoint instead of proxying Yahoo at runtime.
+	router.GET("/api/v1/candles/:symbol", func(c *gin.Context) {
+		symbol := c.Param("symbol")
+		var candles []IndexCandle
+		result := db.Where("symbol = ?", symbol).Order("time asc").Find(&candles)
+		if result.Error != nil {
+			log.Printf("❌ /api/v1/candles/%s query failed: %v", symbol, result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+		c.JSON(http.StatusOK, candles)
 	})
 
 	router.GET("/api/v1/scores/:symbol", func(c *gin.Context) {
