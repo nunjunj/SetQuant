@@ -223,7 +223,7 @@
   <figure>
     <div class="frame" tabindex="0">
       <svg class="dg" viewBox="0 0 1040 670" role="img"
-           aria-label="SetQuant has two paths. A live read path: the browser loads the app from a Next.js server on Vercel, which proxies cached quotes from Yahoo Finance, while the browser fetches JSON directly from a Go API on Cloud Run, which reads only from Postgres on Neon. A nightly path: a GitHub Actions cron job runs a Selenium scraper against SEC Thailand and a scoring script against yfinance, and is the only writer to Postgres.">
+           aria-label="SetQuant has two paths. A live read path: the browser loads the app from a Next.js server on Vercel, which proxies cached quotes and stock candles from Yahoo Finance (index candles come from Postgres), while the browser fetches JSON directly from a Go API on Cloud Run, which reads only from Postgres on Neon. A nightly path: a GitHub Actions cron job runs a Selenium scraper against SEC Thailand and a scoring script against yfinance, and is the only writer to Postgres.">
         <defs>
           <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
             <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
@@ -312,7 +312,7 @@
     <div class="paths">
       <div class="path">
         <h3>Read &mdash; every page view</h3>
-        <p>Vercel serves a client-rendered Next.js app. From there the browser makes two independent calls: SWR hits the Go API on Cloud Run for filings and CEO scores, and Next.js&rsquo; own <code>/api</code> routes proxy Yahoo Finance for candles and index quotes, cached at the edge for an hour. The Go API is <b>read-only</b> &mdash; six GET endpoints, no writes, no session, no cache layer.</p>
+        <p>Vercel serves a client-rendered Next.js app. From there the browser makes two independent calls: SWR hits the Go API on Cloud Run for filings and CEO scores, and Next.js&rsquo; own <code>/api</code> routes proxy Yahoo Finance for stock candles and quotes, cached at the edge for an hour. The SET index is the exception: Yahoo blocks index-chart requests from datacenter IPs, so the daily pipeline persists a year of index OHLC into Postgres and the chart route falls back to it via the Go API &mdash; the index chart has no runtime Yahoo dependency. The Go API is <b>read-only</b> &mdash; seven GET endpoints, no writes, no session, no cache layer.</p>
       </div>
       <div class="path">
         <h3>Write &mdash; once a night</h3>
