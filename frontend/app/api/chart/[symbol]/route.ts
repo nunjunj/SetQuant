@@ -54,6 +54,50 @@ function parseCandles(data: unknown): CandlestickBar[] {
   return candles;
 }
 
+const UA =
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+
+/**
+ * Yahoo's authenticated flow: hit fc.yahoo.com to obtain an A3 session
+ * cookie, exchange it for a crumb, then request the chart with both.
+ * Unauthenticated requests from datacenter IPs (Vercel) get degraded
+ * payloads for index symbols; this path returns the full series.
+ */
+async function fetchWithCrumb(ticker: string): Promise<CandlestickBar[]> {
+  try {
+    const cookieRes = await fetch('https://fc.yahoo.com/', {
+      cache: 'no-store',
+      redirect: 'manual',
+      headers: { 'User-Agent': UA },
+    });
+    const setCookie = cookieRes.headers.get('set-cookie') ?? '';
+    const cookie = setCookie.split(';')[0];
+    if (!cookie) return [];
+
+    const crumbRes = await fetch('https://query1.finance.yahoo.com/v1/test/getcrumb', {
+      cache: 'no-store',
+      headers: { 'User-Agent': UA, Cookie: cookie },
+    });
+    if (!crumbRes.ok) return [];
+    const crumb = (await crumbRes.text()).trim();
+    if (!crumb || crumb.includes('<')) return [];
+
+    const nowSec = Math.floor(Date.now() / 1000);
+    const period1 = nowSec - 365 * 86400;
+    const url =
+      `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}` +
+      `?interval=1d&period1=${period1}&period2=${nowSec}&crumb=${encodeURIComponent(crumb)}`;
+    const res = await fetch(url, {
+      cache: 'no-store',
+      headers: { 'User-Agent': UA, Cookie: cookie },
+    });
+    if (!res.ok) return [];
+    return parseCandles(await res.json());
+  } catch {
+    return [];
+  }
+}
+
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ symbol: string }> },
@@ -101,6 +145,16 @@ export async function GET(
         const retryCandles = parseCandles(retryData);
         if (retryCandles.length > candles.length) {
           candles = retryCandles;
+        }
+      }
+
+      if (candles.length < MIN_VALID_CANDLES) {
+        // Final tier: Yahoo's cookie+crumb flow (what yfinance does). Index
+        // symbols in particular get degraded payloads for anonymous
+        // datacenter clients; an A3 cookie + crumb restores the full series.
+        const crumbCandles = await fetchWithCrumb(ticker);
+        if (crumbCandles.length > candles.length) {
+          candles = crumbCandles;
         }
       }
 
