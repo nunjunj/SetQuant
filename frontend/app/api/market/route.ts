@@ -6,16 +6,19 @@ const SYMBOLS = [
   { key: 'GC=F', label: 'Gold' },
 ];
 
-const FALLBACK = [
-  { label: 'SET', value: 1504, changePct: 0 },
-  { label: 'USD/THB', value: 33.85, changePct: 0 },
-  { label: 'Gold', value: 2890, changePct: 0 },
-];
+// Keyed by label (not position) so a reordering of SYMBOLS can't silently
+// pair the wrong fallback with the wrong quote. Values are stale reference
+// points only, used when the live fetch fails.
+const FALLBACK_BY_LABEL: Record<string, { value: number; changePct: number }> = {
+  SET: { value: 1504, changePct: 0 },
+  'USD/THB': { value: 33.85, changePct: 0 },
+  Gold: { value: 2890, changePct: 0 },
+};
 
 async function fetchQuote(key: string) {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(key)}?interval=1d&range=2d`;
   const res = await fetch(url, {
-    next: { revalidate: 300 },
+    cache: 'no-store',
     headers: { 'User-Agent': 'Mozilla/5.0' },
   });
   if (!res.ok) return null;
@@ -28,18 +31,33 @@ async function fetchQuote(key: string) {
   return { price, changePct };
 }
 
+function fallbackFor(label: string) {
+  const f = FALLBACK_BY_LABEL[label];
+  return { label, value: f.value, changePct: f.changePct, stale: true };
+}
+
 export async function GET() {
   try {
     const quotes = await Promise.all(SYMBOLS.map((s) => fetchQuote(s.key)));
 
     const output = SYMBOLS.map((sym, i) => {
       const q = quotes[i];
-      if (!q) return FALLBACK[i];
-      return { label: sym.label, value: q.price, changePct: q.changePct };
+      if (!q) return fallbackFor(sym.label);
+      return { label: sym.label, value: q.price, changePct: q.changePct, stale: false };
     });
 
-    return NextResponse.json(output);
+    const allStale = output.every((o) => o.stale);
+    return NextResponse.json(output, {
+      headers: {
+        'Cache-Control': allStale
+          ? 'no-store'
+          : 'public, s-maxage=300, stale-while-revalidate=600',
+      },
+    });
   } catch {
-    return NextResponse.json(FALLBACK);
+    return NextResponse.json(
+      SYMBOLS.map((sym) => fallbackFor(sym.label)),
+      { headers: { 'Cache-Control': 'no-store' } },
+    );
   }
 }

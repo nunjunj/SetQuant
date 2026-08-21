@@ -13,18 +13,26 @@ interface CandlestickChartProps {
 
 export default function CandlestickChart({ candles, markers, symbol, height = 320, scaleMargins }: CandlestickChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const chartRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seriesRef = useRef<any>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markersRef = useRef<any>(null);
 
+  // Create the chart once per symbol/container. Deliberately does NOT
+  // depend on candles/markers — those are applied in the effect below so
+  // the chart instance isn't torn down and recreated on every data refresh
+  // (every SWR poll, every keystroke in a parent search box).
   useEffect(() => {
-    if (!containerRef.current || !candles.length) return;
+    if (!containerRef.current) return;
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let chart: any = null;
     let cancelled = false;
 
-    import('lightweight-charts').then(({ createChart, ColorType, CandlestickSeries, createSeriesMarkers }) => {
+    import('lightweight-charts').then(({ createChart, ColorType, CandlestickSeries }) => {
       if (cancelled || !containerRef.current) return;
 
-      chart = createChart(containerRef.current, {
+      const chart = createChart(containerRef.current, {
         width: containerRef.current.clientWidth,
         height,
         layout: {
@@ -38,7 +46,7 @@ export default function CandlestickChart({ candles, markers, symbol, height = 32
         rightPriceScale: { borderColor: '#e2e8f0', ...(scaleMargins ? { scaleMargins } : {}) },
         timeScale: {
           borderColor: '#e2e8f0',
-          timeVisible: true,
+          timeVisible: false,
           fixLeftEdge: true,
           fixRightEdge: true,
           lockVisibleTimeRangeOnResize: true,
@@ -56,38 +64,63 @@ export default function CandlestickChart({ candles, markers, symbol, height = 32
         wickDownColor: '#f43f5e',
       });
 
-      series.setData(candles);
+      chartRef.current = chart;
+      seriesRef.current = series;
 
-      // only mark trades within the chart's date range
-      const first = candles[0].time;
-      const last = candles[candles.length - 1].time;
-      const visibleMarkers = markers.filter((m) => m.time >= first && m.time <= last);
-      if (visibleMarkers.length) {
-        createSeriesMarkers(series, visibleMarkers);
-      }
-
-      chart.timeScale().fitContent();
-
-      // Responsive resize
       const ro = new ResizeObserver(() => {
-        if (containerRef.current && chart) {
-          chart.applyOptions({ width: containerRef.current.clientWidth });
+        if (containerRef.current && chartRef.current) {
+          chartRef.current.applyOptions({ width: containerRef.current.clientWidth });
         }
       });
       ro.observe(containerRef.current);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (chart as any).__ro = ro;
     });
 
     return () => {
       cancelled = true;
+      const chart = chartRef.current;
       if (chart) {
         if (chart.__ro) chart.__ro.disconnect();
         chart.remove();
-        chart = null;
       }
+      chartRef.current = null;
+      seriesRef.current = null;
+      markersRef.current = null;
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [symbol, candles, markers]);
+  }, [symbol]);
+
+  // Apply data/markers whenever they change, without recreating the chart.
+  useEffect(() => {
+    const chart = chartRef.current;
+    const series = seriesRef.current;
+    if (!chart || !series || !candles.length) return;
+
+    let cancelled = false;
+
+    import('lightweight-charts').then(({ createSeriesMarkers }) => {
+      if (cancelled || !chartRef.current || !seriesRef.current) return;
+
+      series.setData(candles);
+
+      const first = candles[0].time;
+      const last = candles[candles.length - 1].time;
+      const visibleMarkers = markers.filter((m) => m.time >= first && m.time <= last);
+
+      if (markersRef.current) {
+        markersRef.current.setMarkers(visibleMarkers);
+      } else {
+        markersRef.current = createSeriesMarkers(series, visibleMarkers);
+      }
+
+      chart.timeScale().fitContent();
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [candles, markers]);
 
   return (
     <div

@@ -1,6 +1,7 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useMemo } from 'react';
 import TradeHistoryTable from './TradeHistoryTable';
 import CeoInsightCard from '@/components/leaderboard/CeoInsightCard';
 import { getMarkers } from '@/lib/api';
@@ -29,12 +30,24 @@ export default function StockDetailPanel({
   ceoScore,
   onClose,
 }: StockDetailPanelProps) {
-  const { candles, isLoading: chartLoading } = useChartData(symbol);
-  const symbolFilings = filings.filter((f) => f.symbol === symbol);
-  const ceoFilings = ceoName ? symbolFilings.filter((f) => f.name === ceoName) : symbolFilings;
-  // drop empty (zero-volume) filings
-  const displayFilings = ceoFilings.filter((f) => f.volume > 0);
-  const markers = getMarkers(symbol, displayFilings);
+  const { candles, isLoading: chartLoading, error: chartError } = useChartData(symbol);
+  // Derived filings + markers are memoized on the stable inputs (the
+  // `filings` array identity, symbol, ceoName) rather than recomputed as a
+  // fresh array every render — CandlestickChart takes `markers` as a prop
+  // and its effect deps rely on referential stability to avoid tearing
+  // down/recreating the chart on every parent re-render (keystrokes, SWR
+  // polls, etc).
+  const displayFilings = useMemo(() => {
+    const symbolFilings = filings.filter((f) => f.symbol === symbol);
+    const ceoFilings = ceoName ? symbolFilings.filter((f) => f.name === ceoName) : symbolFilings;
+    // drop empty (zero-volume) filings
+    return ceoFilings.filter((f) => f.volume > 0);
+  }, [filings, symbol, ceoName]);
+
+  const markers = useMemo(
+    () => getMarkers(symbol, displayFilings),
+    [symbol, displayFilings],
+  );
 
   return (
     <div className="absolute inset-0 z-10 bg-white flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
@@ -69,6 +82,10 @@ export default function StockDetailPanel({
       <div className="px-5 py-4 border-b border-slate-100">
         {chartLoading ? (
           <div className="w-full bg-slate-50 rounded-lg animate-pulse" style={{ height: 320 }} />
+        ) : chartError && !candles.length ? (
+          <div className="w-full flex items-center justify-center bg-slate-50 rounded-lg" style={{ height: 320 }}>
+            <p className="text-sm text-slate-400">Chart unavailable</p>
+          </div>
         ) : (
           <CandlestickChart candles={candles} markers={markers} symbol={symbol} />
         )}

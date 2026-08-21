@@ -4,9 +4,25 @@ import { useEffect, useRef } from 'react';
 import { useChartData } from '@/hooks/useChartData';
 
 const CHART_HEIGHT = 400;
+const MIN_CANDLES = 30;
+
+function spanLabel(candles: { time: string }[]): string {
+  if (candles.length >= 300) return '1Y';
+  if (candles.length < 2) return `${candles.length}D`;
+
+  const first = candles[0].time;
+  const last = candles[candles.length - 1].time;
+  const days = Math.round(
+    (new Date(last).getTime() - new Date(first).getTime()) / 86_400_000,
+  );
+
+  if (days >= 300) return '1Y';
+  if (days > 0) return `${days}D`;
+  return `${candles.length}D`;
+}
 
 export default function MarketSentimentChart() {
-  const { candles, isLoading } = useChartData('^SET');
+  const { candles, isLoading, error } = useChartData('^SET');
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -38,8 +54,8 @@ export default function MarketSentimentChart() {
           fixRightEdge: true,
           lockVisibleTimeRangeOnResize: true,
         },
-        handleScroll: false,
-        handleScale: false,
+        handleScroll: true,
+        handleScale: true,
       });
 
       const candleSeries = chart.addSeries(CandlestickSeries, {
@@ -77,21 +93,35 @@ export default function MarketSentimentChart() {
 
   if (isLoading && !candles.length) {
     return (
-      <div className="mb-4">
+      <div className="max-w-4xl mx-auto px-4 mb-4">
         <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
-          SET Index · 1Y
+          SET Index
         </h2>
         <div className="w-full rounded-lg bg-slate-100 animate-pulse" style={{ height: CHART_HEIGHT }} />
       </div>
     );
   }
 
-  if (!candles.length) return null;
+  if (error && !candles.length) {
+    return (
+      <div className="max-w-4xl mx-auto px-4 mb-4">
+        <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
+          SET Index
+        </h2>
+        <p className="text-sm text-slate-400">Chart unavailable</p>
+      </div>
+    );
+  }
+
+  // Not enough data to render a meaningful chart (e.g. an upstream hiccup
+  // that slipped past validation) — render nothing rather than a
+  // misleading "1Y" label over a near-empty chart.
+  if (candles.length < MIN_CANDLES) return null;
 
   return (
-    <div className="mb-4">
+    <div className="max-w-4xl mx-auto px-4 mb-4">
       <h2 className="text-sm font-semibold text-slate-500 uppercase tracking-wide mb-2">
-        SET Index · 1Y
+        SET Index · {spanLabel(candles)}
       </h2>
       <div
         ref={containerRef}
