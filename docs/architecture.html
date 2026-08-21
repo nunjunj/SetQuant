@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="SetQuant architecture: the live read path, the nightly pipeline, the full stack, and the follow-up questions an interviewer will ask.">
+<title>SetQuant Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=JetBrains+Mono:wght@400;500&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap">
+
+<style>
+  /* minimal reset (standalone page supplies its own) */
+  *,*::before,*::after{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0}
+  h1,h2,h3,h4,p,dl,dd,figure,blockquote{margin:0}
+  button{font:inherit;color:inherit}
+</style>
+<style>
+  :root{
+    --bg:#F4F5F7; --surface:#FFFFFF; --surface-2:#EDEFF3;
+    --ink:#161A21; --muted:#646E80; --line:#D3D8E0; --line-soft:#E3E7ED;
+    --accent:#9A6512; --accent-soft:#F0E6D4;
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --disp:'Archivo',system-ui,-apple-system,sans-serif;
+    --body:'Source Serif 4',Georgia,'Times New Roman',serif;
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#111419; --surface:#191D24; --surface-2:#1F242C;
+      --ink:#E3E7ED; --muted:#8B95A6; --line:#2C333D; --line-soft:#232931;
+      --accent:#E0A94A; --accent-soft:#33291A;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#111419; --surface:#191D24; --surface-2:#1F242C;
+    --ink:#E3E7ED; --muted:#8B95A6; --line:#2C333D; --line-soft:#232931;
+    --accent:#E0A94A; --accent-soft:#33291A;
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:var(--body); font-size:17px; line-height:1.62;
+    margin:0; padding:56px 24px 96px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .page{max-width:1120px; margin:0 auto; display:flex; flex-direction:column; gap:60px}
+  .col{max-width:68ch}
+
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; font-weight:500;
+    letter-spacing:.16em; text-transform:uppercase; color:var(--accent);
+    margin:0 0 14px;
+  }
+  h1{
+    font-family:var(--disp); font-weight:700; font-size:clamp(38px,5.4vw,58px);
+    line-height:1.02; letter-spacing:-.022em; margin:0 0 18px; text-wrap:balance;
+  }
+  h2{
+    font-family:var(--disp); font-weight:600; font-size:23px;
+    letter-spacing:-.012em; margin:0 0 6px; text-wrap:balance;
+  }
+  .h2sub{font-family:var(--mono); font-size:11.5px; color:var(--muted); margin:0 0 26px}
+  .lead{font-size:19px; line-height:1.58; margin:0; color:var(--ink)}
+  .lead b{font-family:var(--disp); font-weight:600}
+  p{margin:0 0 16px}
+  p:last-child{margin-bottom:0}
+
+  /* ---- diagram ---- */
+  figure{margin:0}
+  .frame{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:3px; padding:28px 24px; overflow-x:auto;
+  }
+  .dg{
+    display:block; width:100%; min-width:840px; max-width:100%; height:auto;
+    color:var(--ink); font-family:var(--mono);
+  }
+  .bx{fill:var(--surface); stroke:currentColor; stroke-width:1.5}
+  .bx-ext{fill:none; stroke:currentColor; stroke-width:1; opacity:.42}
+  .bx-grp{fill:none; stroke:currentColor; stroke-width:1.2; stroke-dasharray:6 5; opacity:.4}
+  .t1{font-size:13px; font-weight:500; fill:currentColor}
+  .t2{font-size:10.5px; fill:currentColor; opacity:.6}
+  .tag{font-size:9.5px; letter-spacing:.08em; fill:var(--accent)}
+  .ln{fill:none; stroke:currentColor; stroke-width:1.5; marker-end:url(#ar)}
+  .ln-d{fill:none; stroke:currentColor; stroke-width:1.5; stroke-dasharray:5 4; opacity:.75; marker-end:url(#ar)}
+  .al{font-size:10px; fill:currentColor; opacity:.58}
+  .band{font-size:9.5px; letter-spacing:.14em; fill:currentColor; opacity:.5}
+  figcaption{
+    font-family:var(--mono); font-size:11.5px; line-height:1.7; color:var(--muted);
+    margin-top:16px; padding-left:14px; border-left:2px solid var(--line);
+    max-width:78ch;
+  }
+
+  /* ---- paths ---- */
+  .paths{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:22px}
+  .path{
+    background:var(--surface); border:1px solid var(--line);
+    border-radius:3px; padding:22px 24px;
+  }
+  .path h3{
+    font-family:var(--mono); font-size:11px; font-weight:500;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--accent);
+    margin:0 0 12px;
+  }
+  .path p{font-size:16px; line-height:1.6}
+  code{
+    font-family:var(--mono); font-size:.86em;
+    background:var(--surface-2); padding:1px 5px; border-radius:2px;
+  }
+
+  /* ---- stack ---- */
+  .layers{display:flex; flex-direction:column; gap:0; border-top:1px solid var(--line)}
+  .layer{
+    display:grid; grid-template-columns:170px 1fr; gap:20px;
+    padding:20px 0; border-bottom:1px solid var(--line-soft); align-items:start;
+  }
+  .layer-name{
+    font-family:var(--mono); font-size:11px; font-weight:500;
+    letter-spacing:.12em; text-transform:uppercase; color:var(--muted);
+    padding-top:5px;
+  }
+  .chips{display:flex; flex-wrap:wrap; gap:7px}
+  .chip{
+    font-family:var(--mono); font-size:12px;
+    border:1px solid var(--line); border-radius:2px;
+    padding:3px 9px; background:var(--surface); white-space:nowrap;
+  }
+  .chip i{font-style:normal; color:var(--muted)}
+  .chip.hi{border-color:var(--accent); background:var(--accent-soft); color:var(--ink)}
+  .chip.hi i{color:var(--accent)}
+  .layer-note{
+    font-size:14.5px; color:var(--muted); line-height:1.55;
+    margin:9px 0 0; max-width:62ch;
+  }
+  @media (max-width:640px){
+    .layer{grid-template-columns:1fr; gap:10px}
+    .layer-name{padding-top:0}
+  }
+
+  /* ---- deploy detail ---- */
+  .deploy{
+    background:var(--surface); border:1px solid var(--line); border-radius:3px;
+    padding:24px 26px; display:flex; flex-direction:column; gap:18px;
+  }
+  .kv{display:grid; grid-template-columns:190px 1fr; gap:6px 20px; font-family:var(--mono); font-size:12.5px}
+  .kv dt{color:var(--muted); letter-spacing:.03em}
+  .kv dd{margin:0; overflow-wrap:anywhere}
+  .cmd{
+    font-family:var(--mono); font-size:12.5px; line-height:1.7;
+    background:var(--surface-2); border-radius:2px;
+    padding:14px 16px; overflow-x:auto; white-space:pre;
+  }
+  .cmd .c{color:var(--muted)}
+  @media (max-width:640px){ .kv{grid-template-columns:1fr; gap:2px 0} .kv dd{margin-bottom:10px} }
+
+  /* ---- follow-ups ---- */
+  .qa{display:flex; flex-direction:column; gap:0; border-top:1px solid var(--line)}
+  .q{padding:22px 0; border-bottom:1px solid var(--line-soft)}
+  .q h3{
+    font-family:var(--disp); font-weight:600; font-size:17px;
+    margin:0 0 8px; letter-spacing:-.008em;
+  }
+  .q p{font-size:16px; line-height:1.6; color:var(--muted); max-width:76ch}
+  .q p b{color:var(--ink); font-family:var(--disp); font-weight:600; font-size:15.5px}
+
+  a{color:var(--accent)}
+  a:focus-visible, .frame:focus-visible{outline:2px solid var(--accent); outline-offset:3px}
+</style>
+<style>
+  /* ---- theme toggle ---- */
+  .themetoggle{
+    position:fixed; top:16px; right:16px; z-index:10;
+    font-family:var(--mono); font-size:10.5px; font-weight:500;
+    letter-spacing:.12em; text-transform:uppercase;
+    background:var(--surface); color:var(--muted);
+    border:1px solid var(--line); border-radius:2px;
+    padding:7px 12px; cursor:pointer; line-height:1;
+  }
+  .themetoggle:hover{color:var(--ink); border-color:var(--muted)}
+  .themetoggle:focus-visible{outline:2px solid var(--accent); outline-offset:2px}
+
+  /* ---- print / save-as-PDF: force the light palette ---- */
+  @media print{
+    :root, :root[data-theme="dark"], :root[data-theme="light"]{
+      --bg:#fff; --surface:#fff; --surface-2:#f1f2f4;
+      --ink:#111418; --muted:#555d6b; --line:#b6bcc6; --line-soft:#dcdfe5;
+      --accent:#7d520d; --accent-soft:#f4ecdd;
+    }
+    body{padding:0; font-size:11.5pt}
+    .page{gap:32px; max-width:none}
+    .themetoggle{display:none}
+    .dg{min-width:0}
+    .frame{overflow:visible}
+    figure,.path,.deploy,.q,.layer,section{break-inside:avoid}
+    h2{break-after:avoid}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none !important; transition:none !important}
+  }
+</style>
+<script>
+  // restore theme before first paint to avoid a flash
+  try{var t=localStorage.getItem('sq-theme'); if(t){document.documentElement.setAttribute('data-theme',t)}}catch(e){}
+</script>
+</head>
+<body>
+
+<button class="themetoggle" id="themebtn" type="button">Dark</button>
+
+<div class="page">
+
+  <header class="col">
+    <p class="eyebrow">Interview one-pager</p>
+    <h1>SetQuant</h1>
+    <p class="lead">SetQuant tracks insider trades filed with Thailand&rsquo;s SEC and scores every executive on what their own buying and selling actually returned. One engineer. When someone says &ldquo;walk me through your architecture&rdquo;, <b>draw this and nothing more</b>:</p>
+  </header>
+
+  <figure>
+    <div class="frame" tabindex="0">
+      <svg class="dg" viewBox="0 0 1040 670" role="img"
+           aria-label="SetQuant has two paths. A live read path: the browser loads the app from a Next.js server on Vercel, which proxies cached quotes from Yahoo Finance, while the browser fetches JSON directly from a Go API on Cloud Run, which reads only from Postgres on Neon. A nightly path: a GitHub Actions cron job runs a Selenium scraper against SEC Thailand and a scoring script against yfinance, and is the only writer to Postgres.">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="currentColor"/>
+          </marker>
+        </defs>
+
+        <text class="band" x="40" y="24">LIVE &#183; EVERY PAGE VIEW</text>
+
+        <!-- Browser -->
+        <rect class="bx" x="40" y="110" width="200" height="76" rx="2"/>
+        <text class="t1" x="140" y="142" text-anchor="middle">Browser</text>
+        <text class="t2" x="140" y="164" text-anchor="middle">React 19 &#183; SWR</text>
+
+        <!-- Next.js -->
+        <rect class="bx" x="372" y="40" width="264" height="90" rx="2"/>
+        <text class="t1" x="504" y="70" text-anchor="middle">Next.js server</text>
+        <text class="t2" x="504" y="90" text-anchor="middle">page shell + /api proxies</text>
+        <text class="tag" x="504" y="112" text-anchor="middle">VERCEL</text>
+
+        <!-- Go API -->
+        <rect class="bx" x="372" y="192" width="264" height="90" rx="2"/>
+        <text class="t1" x="504" y="222" text-anchor="middle">Go API</text>
+        <text class="t2" x="504" y="242" text-anchor="middle">Gin + GORM &#183; read-only JSON</text>
+        <text class="tag" x="504" y="264" text-anchor="middle">CLOUD RUN &#183; asia-southeast1</text>
+
+        <!-- Yahoo -->
+        <rect class="bx-ext" x="724" y="53" width="276" height="64" rx="2"/>
+        <text class="t1" x="744" y="89">Yahoo Finance</text>
+        <text class="tag" x="980" y="89" text-anchor="end">candles + quotes</text>
+
+        <!-- Postgres -->
+        <rect class="bx" x="724" y="296" width="276" height="90" rx="2"/>
+        <text class="t1" x="862" y="326" text-anchor="middle">Postgres</text>
+        <text class="t2" x="862" y="346" text-anchor="middle">sec_filings &#183; ceo_scores</text>
+        <text class="tag" x="862" y="368" text-anchor="middle">NEON &#183; serverless</text>
+
+        <!-- read arrows -->
+        <path class="ln" d="M240,132 H286 V85 H372"/>
+        <text class="al" x="366" y="77" text-anchor="end">loads app</text>
+
+        <path class="ln" d="M240,164 H286 V237 H372"/>
+        <text class="al" x="366" y="229" text-anchor="end">fetch &#183; SWR</text>
+
+        <path class="ln" d="M636,85 H724"/>
+        <text class="al" x="680" y="77" text-anchor="middle">cached 1h</text>
+
+        <path class="ln" d="M636,237 H862 V296"/>
+        <text class="al" x="752" y="229" text-anchor="middle">reads only</text>
+
+        <!-- nightly group -->
+        <rect class="bx-grp" x="40" y="430" width="596" height="212" rx="3"/>
+        <text class="band" x="64" y="458">NIGHTLY &#183; GITHUB ACTIONS &#183; 0 14 * * *</text>
+
+        <rect class="bx" x="64" y="478" width="248" height="64" rx="2"/>
+        <text class="t1" x="188" y="504" text-anchor="middle">main.py</text>
+        <text class="t2" x="188" y="524" text-anchor="middle">Selenium &#183; truncate + reload</text>
+
+        <rect class="bx" x="64" y="560" width="248" height="64" rx="2"/>
+        <text class="t1" x="188" y="586" text-anchor="middle">calculate_scores.py</text>
+        <text class="t2" x="188" y="606" text-anchor="middle">mark-to-market returns</text>
+
+        <rect class="bx-ext" x="724" y="478" width="276" height="64" rx="2"/>
+        <text class="t1" x="744" y="514">SEC Thailand</text>
+        <text class="tag" x="980" y="514" text-anchor="end">market.sec.or.th</text>
+
+        <rect class="bx-ext" x="724" y="560" width="276" height="64" rx="2"/>
+        <text class="t1" x="744" y="596">yfinance</text>
+        <text class="tag" x="980" y="596" text-anchor="end">1y price history</text>
+
+        <path class="ln" d="M312,510 H724"/>
+        <text class="al" x="518" y="502" text-anchor="middle">scrapes filing table</text>
+
+        <path class="ln" d="M312,592 H724"/>
+        <text class="al" x="518" y="584" text-anchor="middle">downloads OHLC</text>
+
+        <path class="ln-d" d="M560,430 V341 H724"/>
+        <text class="al" x="646" y="333" text-anchor="middle">writes nightly</text>
+      </svg>
+    </div>
+    <figcaption>Nine boxes, no file tree. The one asymmetry worth pointing at: the browser talks to the Go API <em>directly</em>, not through Next.js &mdash; and the nightly job is the only thing that ever writes. Every arrow label is a question you want them to ask.</figcaption>
+  </figure>
+
+  <section class="col" style="max-width:none">
+    <h2>The two paths</h2>
+    <p class="h2sub">read is live and stateless &#183; write is batched and offline</p>
+    <div class="paths">
+      <div class="path">
+        <h3>Read &mdash; every page view</h3>
+        <p>Vercel serves a client-rendered Next.js app. From there the browser makes two independent calls: SWR hits the Go API on Cloud Run for filings and CEO scores, and Next.js&rsquo; own <code>/api</code> routes proxy Yahoo Finance for candles and index quotes, cached at the edge for an hour. The Go API is <b>read-only</b> &mdash; six GET endpoints, no writes, no session, no cache layer.</p>
+      </div>
+      <div class="path">
+        <h3>Write &mdash; once a night</h3>
+        <p>A GitHub Actions cron at 14:00 UTC (after the SET close) drives headless Chrome through the SEC&rsquo;s filing pages, parses the HTML table with pandas, converts Buddhist-era dates, and bulk-loads <code>sec_filings</code>. A second script pulls a year of prices from yfinance and upserts <code>ceo_scores</code>. Nothing in a request path ever writes.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Stack</h2>
+    <p class="h2sub">what runs, and where it runs</p>
+    <div class="layers">
+
+      <div class="layer">
+        <div class="layer-name">Frontend</div>
+        <div>
+          <div class="chips">
+            <span class="chip">Next.js <i>16.1</i></span>
+            <span class="chip">React <i>19.2</i></span>
+            <span class="chip">TypeScript <i>5</i></span>
+            <span class="chip">Tailwind <i>v4</i></span>
+            <span class="chip">SWR <i>2.4</i></span>
+            <span class="chip">lightweight-charts <i>5.1</i></span>
+          </div>
+          <p class="layer-note">App Router, client-rendered. Tailwind v4 needs no config file. The chart library is browser-only, so it loads behind a dynamic import inside an effect.</p>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-name">API</div>
+        <div>
+          <div class="chips">
+            <span class="chip">Go <i>1.24</i></span>
+            <span class="chip">Gin <i>1.11</i></span>
+            <span class="chip">GORM <i>1.31</i></span>
+          </div>
+          <p class="layer-note">One <code>main.go</code>. GORM auto-migrates both tables on boot, which is what makes a cold deploy against an empty database work.</p>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-name">Data</div>
+        <div>
+          <div class="chips">
+            <span class="chip">PostgreSQL <i>15</i></span>
+            <span class="chip">SQLAlchemy <i>2.0</i></span>
+            <span class="chip">psycopg2</span>
+          </div>
+          <p class="layer-note">Two tables, <code>sec_filings</code> and <code>ceo_scores</code>, with a unique index on (name, symbol). No cache, no queue, no object store.</p>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-name">Pipeline</div>
+        <div>
+          <div class="chips">
+            <span class="chip">Python <i>3.12</i></span>
+            <span class="chip">Selenium <i>4.41</i></span>
+            <span class="chip">pandas <i>3.0</i></span>
+            <span class="chip">NumPy <i>2.4</i></span>
+            <span class="chip">yfinance <i>1.2</i></span>
+            <span class="chip">lxml</span>
+          </div>
+          <p class="layer-note">Selenium 4 ships Selenium Manager, so CI installs Chrome and the driver resolves itself. <code>pandas.read_html</code> does the table parsing.</p>
+        </div>
+      </div>
+
+      <div class="layer">
+        <div class="layer-name">Deployment</div>
+        <div>
+          <div class="chips">
+            <span class="chip hi">Google Cloud Run <i>Go API</i></span>
+            <span class="chip hi">Artifact Registry <i>images</i></span>
+            <span class="chip hi">Cloud Build <i>source deploy</i></span>
+            <span class="chip hi">Vercel <i>frontend</i></span>
+            <span class="chip hi">Neon <i>Postgres</i></span>
+            <span class="chip hi">GitHub Actions <i>cron</i></span>
+            <span class="chip">Docker</span>
+            <span class="chip">docker&#8209;compose <i>local</i></span>
+          </div>
+          <p class="layer-note">Three managed platforms, each scaling to zero. Local dev is a single <code>docker-compose up</code> &mdash; Postgres, API, and frontend.</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section>
+    <h2>Deployment, concretely</h2>
+    <p class="h2sub">the details an interviewer pokes at</p>
+    <div class="deploy">
+      <dl class="kv">
+        <dt>GCP project</dt><dd>setquant-project-001</dd>
+        <dt>Cloud Run service</dt><dd>setquant-api &#183; asia-southeast1 &#183; max 20 instances</dd>
+        <dt>Why that region</dt><dd>closest to Bangkok &mdash; the users and the data source are both Thai</dd>
+        <dt>Image</dt><dd>Artifact Registry &#183; cloud-run-source-deploy &#183; multi-stage golang:alpine &rarr; alpine</dd>
+        <dt>Runtime config</dt><dd>DATABASE_URL, APP_ENV set on the service; PORT injected by Cloud Run</dd>
+        <dt>Frontend</dt><dd>Vercel &#183; root dir <code>frontend</code> &#183; NEXT_PUBLIC_API_URL inlined at build</dd>
+        <dt>Database</dt><dd>Neon serverless Postgres, sslmode=require</dd>
+        <dt>Scheduled job</dt><dd>GitHub Actions, 0 14 * * *, concurrency group so runs never overlap</dd>
+      </dl>
+      <div class="cmd"><span class="c"># one command, no CI config &mdash; Cloud Build builds backend/Dockerfile server-side</span>
+gcloud run deploy setquant-api \
+  --source backend \
+  --region asia-southeast1 \
+  --project setquant-project-001</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Follow-ups they&rsquo;ll ask</h2>
+    <p class="h2sub">the answers the diagram is set up to invite</p>
+    <div class="qa">
+
+      <div class="q">
+        <h3>Why does the browser call Go directly instead of proxying through Next.js?</h3>
+        <p><b>Because it saves a hop, and I decided the cost was acceptable.</b> <code>NEXT_PUBLIC_API_URL</code> is inlined at build time, so the client fetches Cloud Run straight from the browser rather than paying a round trip through a Vercel function. The price is a CORS policy on the Go side, which is currently <code>*</code> &mdash; fine for a public read-only API, but the right follow-up is to pin it to the Vercel origin. It also means the API URL is public, which is only safe <em>because</em> the API is read-only.</p>
+      </div>
+
+      <div class="q">
+        <h3>Why truncate and reload instead of an incremental upsert?</h3>
+        <p><b>The source has no stable row identifier.</b> The SEC pages are rendered HTML with no filing ID I can key on, so an upsert would need a synthetic key over (symbol, name, trade date, volume) and would still drift when the regulator amends a filing. A full reload is ~4 MB, runs in minutes, and is idempotent. The real cost is a window during the reload where readers see an empty table &mdash; the honest fix is to load into a shadow table and swap.</p>
+      </div>
+
+      <div class="q">
+        <h3>Why Cloud Run rather than the usual PaaS?</h3>
+        <p><b>Region and scale-to-zero.</b> asia-southeast1 puts the API a few milliseconds from Thai users and from Neon, and the service costs nothing while idle. The deciding factor was <code>gcloud run deploy --source</code>: it builds the existing Dockerfile server-side, so there is no pipeline YAML, no registry login, and no build config in the repo at all.</p>
+      </div>
+
+      <div class="q">
+        <h3>Where does the scoring logic actually live?</h3>
+        <p><b>In the pipeline, not the API.</b> <code>calculate_scores.py</code> computes mark-to-market returns per executive per symbol &mdash; every buy and sell valued against current price, filtered for zero-volume and off-market-price filings &mdash; and writes the result to <code>ceo_scores</code>. The Go API just selects and orders. Every request is a single indexed read, and the expensive work happens once a night.</p>
+      </div>
+
+      <div class="q">
+        <h3>What breaks first?</h3>
+        <p><b>The scrape.</b> It is Selenium against someone else&rsquo;s markup, so a layout change on the SEC site breaks ingestion silently &mdash; the app keeps serving yesterday&rsquo;s data with no alarm. That is the first thing I would instrument: a freshness check on max(filing_date) that fails the workflow rather than the page.</p>
+      </div>
+
+      <div class="q">
+        <h3>What&rsquo;s in the repo but not on the diagram?</h3>
+        <p><b>A Twitter bot.</b> <code>twitter.go</code> formats a daily insider-trade post and there are internal endpoints behind a shared-secret header to trigger it. It is deliberately not deployed &mdash; no credentials in production &mdash; so it is not part of the architecture I would claim to run.</p>
+      </div>
+
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, btn=document.getElementById('themebtn');
+  var mq=window.matchMedia('(prefers-color-scheme: dark)');
+  function current(){
+    return root.getAttribute('data-theme') || (mq.matches?'dark':'light');
+  }
+  function sync(){
+    var next = current()==='dark' ? 'light' : 'dark';
+    btn.textContent = next;
+    btn.setAttribute('aria-label','Switch to '+next+' theme');
+  }
+  btn.addEventListener('click',function(){
+    var next = current()==='dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme',next);
+    try{localStorage.setItem('sq-theme',next)}catch(e){}
+    sync();
+  });
+  mq.addEventListener('change',sync);
+  sync();
+})();
+</script>
+
+</body>
+</html>

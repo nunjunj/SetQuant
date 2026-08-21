@@ -15,8 +15,11 @@ function MarketChip({ item }: { item: MarketItem }) {
   const hasChange = Math.abs(item.changePct) > 0.001;
 
   return (
-    <div className="flex items-center gap-1">
-      <span className="text-slate-400 text-xs">{item.label}</span>
+    <div
+      className={`flex items-center gap-1 whitespace-nowrap ${item.stale ? 'opacity-60' : ''}`}
+      title={item.stale ? 'Delayed/fallback value' : undefined}
+    >
+      <span className="text-slate-500 text-xs">{item.label}</span>
       <span className="text-slate-700 text-xs font-medium tabular-nums">
         {formatValue(item.label, item.value)}
       </span>
@@ -63,7 +66,7 @@ export default function Header() {
   }, [today, newestTradeDate]);
 
   return (
-    <header className="h-14 border-b border-slate-100 flex items-center gap-4 px-6 flex-shrink-0 bg-white">
+    <header className="h-14 border-b border-slate-100 flex items-center gap-3 sm:gap-4 px-4 sm:px-6 flex-shrink-0 bg-white">
       {/* Logo */}
       <div className="flex items-center gap-2.5 flex-shrink-0">
         <div className="w-7 h-7 rounded-lg bg-emerald-500 flex items-center justify-center">
@@ -71,25 +74,25 @@ export default function Header() {
         </div>
         <span className="font-semibold text-slate-800 tracking-tight">SetQuant</span>
         <span className="text-slate-300 text-sm hidden sm:inline">·</span>
-        <span className="text-slate-400 text-sm hidden sm:inline">Thai Insider Filings</span>
+        <span className="text-slate-500 text-sm hidden sm:inline">Thai Insider Filings</span>
       </div>
 
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Market data */}
-      <div className="hidden xl:flex items-center gap-4">
-        {market.map((item, i) => (
-          <div key={item.label} className="flex items-center gap-4">
-            {i > 0 && <span className="text-slate-200 select-none">·</span>}
-            <MarketChip item={item} />
-          </div>
-        ))}
+      {/* Market data — scrolls horizontally on narrow screens rather than
+          vanishing; the logo and freshness stay pinned on either side. */}
+      <div className="flex-1 min-w-0 flex justify-end">
+        <div className="flex items-center gap-4 overflow-x-auto no-scrollbar">
+          {market.map((item, i) => (
+            <div key={item.label} className="flex items-center gap-4 flex-shrink-0">
+              {i > 0 && <span className="text-slate-200 select-none">·</span>}
+              <MarketChip item={item} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Date + data freshness */}
       <div className="flex items-center gap-3 flex-shrink-0">
-        <span className="text-slate-400 text-sm hidden sm:block tabular-nums">
+        <span className="text-slate-500 text-sm hidden lg:block tabular-nums">
           {today ?? '\u00A0'}
         </span>
         {newestTradeDate && (
@@ -97,7 +100,7 @@ export default function Header() {
             <span
               className={`w-2 h-2 rounded-full ${isFresh ? 'bg-emerald-400' : 'bg-amber-400'}`}
             />
-            <span className="text-xs text-slate-400 tabular-nums">
+            <span className="text-xs text-slate-500 tabular-nums whitespace-nowrap">
               Updated {formatDate(newestTradeDate)}
             </span>
           </div>

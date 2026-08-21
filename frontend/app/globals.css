@@ -31,3 +31,30 @@ body {
   border: 1px solid #f1f5f9;
   border-radius: 0.75rem;
 }
+
+/* Respect the OS "reduce motion" setting: skeleton pulses, slide-ins and
+   transitions all collapse to an instant state change. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .animate-pulse {
+    animation: none !important;
+  }
+}
+
+/* Horizontally scrollable strips (mobile market chips) without a visible bar. */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}

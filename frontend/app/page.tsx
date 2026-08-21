@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback } from 'react';
 import AppShell from '@/components/layout/AppShell';
-import FilterSidebar from '@/components/layout/FilterSidebar';
+import FilterSidebar, { FilterPanel } from '@/components/layout/FilterSidebar';
 import TradeFeed from '@/components/feed/TradeFeed';
 import CeoLeaderboard from '@/components/leaderboard/CeoLeaderboard';
 import StockDetailPanel from '@/components/chart/StockDetailPanel';
@@ -105,12 +105,16 @@ export default function Home() {
     return result;
   }, [filings, filters, latestDateKey]);
 
-  const hasActiveFilters =
-    filters.search.trim() !== '' ||
-    filters.transaction !== 'ALL' ||
-    filters.dateRange !== 'ALL' ||
-    filters.minValue !== 'ALL' ||
-    filters.insiderTier !== 'ALL';
+  // One count for the mobile Filters badge; `hasActiveFilters` is the same
+  // question asked as a boolean.
+  const activeFilterCount =
+    (filters.search.trim() !== '' ? 1 : 0) +
+    (filters.transaction !== DEFAULT_FILTERS.transaction ? 1 : 0) +
+    (filters.dateRange !== DEFAULT_FILTERS.dateRange ? 1 : 0) +
+    (filters.minValue !== DEFAULT_FILTERS.minValue ? 1 : 0) +
+    (filters.insiderTier !== DEFAULT_FILTERS.insiderTier ? 1 : 0);
+
+  const hasActiveFilters = activeFilterCount > 0;
 
   // Computed off the *unfiltered* feed so dedup decisions ("show on newest
   // filing per insider") don't shift when the user toggles sidebar filters.
@@ -135,6 +139,8 @@ export default function Home() {
   return (
     <AppShell
       leftSidebar={<FilterSidebar filters={filters} onFiltersChange={setFilters} />}
+      mobileFilters={<FilterPanel filters={filters} onFiltersChange={setFilters} />}
+      activeFilterCount={activeFilterCount}
       sidebar={
         <CeoLeaderboard
           scores={scores}

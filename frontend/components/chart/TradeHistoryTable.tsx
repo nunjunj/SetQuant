@@ -18,23 +18,23 @@ export default function TradeHistoryTable({ filings, compact = false }: TradeHis
         <thead className="sticky top-0 z-[1] bg-white">
           <tr className="border-b border-slate-100">
             {!compact && (
-              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Name
               </th>
             )}
-            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Type
             </th>
-            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider w-[1%] whitespace-nowrap">
+            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-[1%] whitespace-nowrap">
               Price
             </th>
-            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider w-[1%] whitespace-nowrap">
+            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-[1%] whitespace-nowrap">
               Volume
             </th>
-            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider w-[1%] whitespace-nowrap">
+            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-[1%] whitespace-nowrap">
               Value
             </th>
-            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-400 uppercase tracking-wider w-[1%] whitespace-nowrap">
+            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 uppercase tracking-wider w-[1%] whitespace-nowrap">
               Date
             </th>
           </tr>
@@ -45,7 +45,7 @@ export default function TradeHistoryTable({ filings, compact = false }: TradeHis
               {!compact && (
                 <td className="px-4 py-2.5">
                   <p className="font-medium text-slate-800 truncate max-w-[160px]">{f.name}</p>
-                  <p className="text-xs text-slate-400 truncate">{f.position}</p>
+                  <p className="text-xs text-slate-500 truncate">{f.position}</p>
                 </td>
               )}
               <td className="px-4 py-2.5">
@@ -60,7 +60,7 @@ export default function TradeHistoryTable({ filings, compact = false }: TradeHis
               <td className="px-4 py-2.5 text-right text-slate-700 font-medium tabular-nums w-[1%] whitespace-nowrap">
                 {formatTHB(f.volume * f.price)}
               </td>
-              <td className="px-4 py-2.5 text-right text-slate-400 text-xs whitespace-nowrap w-[1%]">
+              <td className="px-4 py-2.5 text-right text-slate-500 text-xs whitespace-nowrap w-[1%]">
                 {formatDate(f.trade_date)}
               </td>
             </tr>

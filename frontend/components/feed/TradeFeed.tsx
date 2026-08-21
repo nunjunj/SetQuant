@@ -1,10 +1,54 @@
 'use client';
 
+import { useMemo } from 'react';
 import TradeRow from './TradeRow';
 import { SkeletonRow } from '@/components/ui/Skeleton';
-import { formatDate, formatTHB, toDateKey } from '@/lib/formatters';
+import { formatDate, formatTHB, getTxSide, toDateKey } from '@/lib/formatters';
 import type { FilingInsight } from '@/lib/insight';
 import type { SecFiling } from '@/lib/types';
+
+interface FilingRun {
+  /** The newest filing in the run — supplies symbol, name, badge and tags. */
+  head: SecFiling;
+  count: number;
+  totalValue: number;
+  totalVolume: number;
+  latestDate: string;
+}
+
+/**
+ * Collapse *consecutive* filings that share symbol + insider + side into one
+ * row. Runs are consecutive-only on purpose: the feed is chronological, so a
+ * run is a single reporting batch, and collapsing across gaps would reorder
+ * the timeline.
+ */
+function groupRuns(filings: SecFiling[]): FilingRun[] {
+  const runs: FilingRun[] = [];
+  let key = '';
+
+  for (const f of filings) {
+    const k = `${f.symbol}|${f.name}|${getTxSide(f.transaction_type)}`;
+    const last = runs[runs.length - 1];
+    if (last && k === key) {
+      last.count += 1;
+      last.totalValue += f.volume * f.price;
+      last.totalVolume += f.volume;
+      const d = toDateKey(f.trade_date);
+      if (d > toDateKey(last.latestDate)) last.latestDate = f.trade_date;
+    } else {
+      runs.push({
+        head: f,
+        count: 1,
+        totalValue: f.volume * f.price,
+        totalVolume: f.volume,
+        latestDate: f.trade_date,
+      });
+      key = k;
+    }
+  }
+
+  return runs;
+}
 
 interface TradeFeedProps {
   filings: SecFiling[];
@@ -31,6 +75,8 @@ export default function TradeFeed({
   hasActiveFilters,
   onClearFilters,
 }: TradeFeedProps) {
+  const runs = useMemo(() => groupRuns(filings), [filings]);
+
   const totalValue = filings.reduce((sum, f) => sum + f.volume * f.price, 0);
 
   // Date range across the displayed rows so the header label matches what the
@@ -52,7 +98,7 @@ export default function TradeFeed({
     <div className="max-w-4xl mx-auto">
       {/* Section heading */}
       <div className="px-4 pt-5 pb-2">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
           Recent Insider Filings
         </h2>
       </div>
@@ -62,15 +108,15 @@ export default function TradeFeed({
           label says so rather than implying a total count. */}
       {!isLoading && filings.length > 0 && (
         <div className="flex items-center gap-3 px-4 py-1.5 mb-1 border-y border-slate-100 bg-slate-50/60">
-          <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-widest tabular-nums">
+          <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-widest tabular-nums">
             Latest {filings.length} filings
           </span>
           <span className="text-slate-200 select-none">|</span>
-          <span className="text-[10px] text-slate-400 tabular-nums">
+          <span className="text-[10px] text-slate-500 tabular-nums">
             {formatDate(minDate)} – {formatDate(maxDate)}
           </span>
           <span className="text-slate-200 select-none">|</span>
-          <span className="text-[10px] text-slate-400 tabular-nums">
+          <span className="text-[10px] text-slate-500 tabular-nums">
             {formatTHB(totalValue)} total
           </span>
         </div>
@@ -83,7 +129,7 @@ export default function TradeFeed({
           {hasActiveFilters ? (
             <>
               <p className="text-sm text-slate-500">No filings match your filters.</p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Try a wider date range, a lower minimum value, or a different tier.
               </p>
               {onClearFilters && (
@@ -98,21 +144,25 @@ export default function TradeFeed({
           ) : (
             <>
               <p className="text-sm text-slate-500">No recent insider filings.</p>
-              <p className="text-xs text-slate-400 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Elite insiders trade rarely — check back after the next filing batch.
               </p>
             </>
           )}
         </div>
       ) : (
-        filings.map((filing) => (
+        runs.map((run) => (
           <TradeRow
-            key={filing.id}
-            filing={filing}
-            isSelected={selectedSymbol === filing.symbol && selectedCeoName === filing.name}
-            onClick={() => onSelect(filing.symbol, filing.name)}
-            insight={insightMap?.get(filing.id) ?? null}
-            derivedTags={derivedTagsMap?.get(filing.id)}
+            key={run.head.id}
+            filing={run.head}
+            count={run.count}
+            totalValue={run.totalValue}
+            totalVolume={run.totalVolume}
+            latestDate={run.latestDate}
+            isSelected={selectedSymbol === run.head.symbol && selectedCeoName === run.head.name}
+            onClick={() => onSelect(run.head.symbol, run.head.name)}
+            insight={insightMap?.get(run.head.id) ?? null}
+            derivedTags={derivedTagsMap?.get(run.head.id)}
           />
         ))
       )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CandlestickBar, TradeMarker } from '@/lib/types';
 
 interface CandlestickChartProps {
@@ -19,6 +19,10 @@ export default function CandlestickChart({ candles, markers, symbol, height = 32
   const seriesRef = useRef<any>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const markersRef = useRef<any>(null);
+  // Bumped when chart creation completes: the async import can resolve after
+  // the data effect first runs (and bails on a null chartRef), so the data
+  // effect must re-run once the chart actually exists.
+  const [chartEpoch, setChartEpoch] = useState(0);
 
   // Create the chart once per symbol/container. Deliberately does NOT
   // depend on candles/markers — those are applied in the effect below so
@@ -66,6 +70,7 @@ export default function CandlestickChart({ candles, markers, symbol, height = 32
 
       chartRef.current = chart;
       seriesRef.current = series;
+      setChartEpoch((e) => e + 1);
 
       const ro = new ResizeObserver(() => {
         if (containerRef.current && chartRef.current) {
@@ -120,7 +125,7 @@ export default function CandlestickChart({ candles, markers, symbol, height = 32
     return () => {
       cancelled = true;
     };
-  }, [candles, markers]);
+  }, [candles, markers, chartEpoch]);
 
   return (
     <div

@@ -50,9 +50,12 @@ export default function StockDetailPanel({
   );
 
   return (
-    <div className="absolute inset-0 z-10 bg-white flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
-      {/* Panel header */}
-      <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-shrink-0">
+    // Below md the panel escapes the main column and covers the viewport, so
+    // the header/tab bar can't crowd it; md+ keeps the in-column overlay.
+    <div className="fixed inset-0 z-40 md:absolute md:z-10 bg-white flex flex-col overflow-y-auto animate-in slide-in-from-right duration-200">
+      {/* Panel header — sticky so the close control stays reachable while the
+          chart and history scroll under it. */}
+      <div className="sticky top-0 z-10 bg-white flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-slate-100 flex-shrink-0">
         <div className="flex items-center gap-3">
           <span className="px-2.5 py-1 rounded-md bg-slate-100 text-slate-700 text-sm font-bold font-mono">
             {symbol}
@@ -62,14 +65,14 @@ export default function StockDetailPanel({
               {ceoName}
             </span>
           ) : (
-            <span className="text-slate-400 text-sm">
+            <span className="text-slate-500 text-sm">
               {displayFilings.length} filing{displayFilings.length !== 1 ? 's' : ''}
             </span>
           )}
         </div>
         <button
           onClick={onClose}
-          className="w-8 h-8 flex items-center justify-center rounded-md text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-md border border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer flex-shrink-0 md:border-0"
           aria-label="Close panel"
         >
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -79,7 +82,7 @@ export default function StockDetailPanel({
       </div>
 
       {/* Chart */}
-      <div className="px-5 py-4 border-b border-slate-100">
+      <div className="px-3 md:px-5 py-4 border-b border-slate-100">
         {chartLoading ? (
           <div className="w-full bg-slate-50 rounded-lg animate-pulse" style={{ height: 320 }} />
         ) : chartError && !candles.length ? (
@@ -93,13 +96,13 @@ export default function StockDetailPanel({
 
       {/* Lower section */}
       {ceoScore ? (
-        <div className="flex flex-col md:flex-row gap-4 p-5">
+        <div className="flex flex-col md:flex-row gap-4 p-4 md:p-5">
           <div className="md:w-96 flex-shrink-0">
             <CeoInsightCard score={ceoScore} />
           </div>
           <div className="flex-1 min-w-0">
             <div className="px-0 py-1 mb-1">
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+              <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
                 Filing History
               </h3>
             </div>
@@ -109,7 +112,7 @@ export default function StockDetailPanel({
       ) : (
         <div>
           <div className="px-5 py-3">
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
               Filing History
             </h3>
           </div>

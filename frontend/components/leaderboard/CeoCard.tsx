@@ -29,7 +29,7 @@ export default function CeoCard({ score, rank, isSelected, onClick }: CeoCardPro
       {/* Name + micro stat */}
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-slate-600 truncate">{score.name}</p>
-        <p className="text-[10px] text-slate-400 tabular-nums">
+        <p className="text-[10px] text-slate-500 tabular-nums">
           {score.buy_count + score.sell_count} trade{score.buy_count + score.sell_count !== 1 ? 's' : ''} · 1Y return
         </p>
       </div>

@@ -1,4 +1,4 @@
-import type { SecFiling, CeoScore, CandlestickBar, TradeMarker } from './types';
+import type { SecFiling, CeoScore, CandlestickBar } from './types';
 
 export const DUMMY_FILINGS: SecFiling[] = [
   {
@@ -165,27 +165,3 @@ const BASE_PRICES: Record<string, number> = {
 export const DUMMY_CANDLES: Record<string, CandlestickBar[]> = Object.fromEntries(
   Object.entries(BASE_PRICES).map(([sym, price]) => [sym, generateCandles(sym, price)])
 );
-
-export function getDummyMarkers(symbol: string, filings: SecFiling[]): TradeMarker[] {
-  const candles = DUMMY_CANDLES[symbol];
-  if (!candles || !candles.length) return [];
-
-  const symbolFilings = filings.filter((f) => f.symbol === symbol).slice(0, 4);
-  const markers: TradeMarker[] = [];
-
-  symbolFilings.forEach((filing, i) => {
-    // place marker on a candle near index (candles.length - 10 + i*3)
-    const idx = Math.min(candles.length - 1, Math.max(0, candles.length - 12 + i * 3));
-    const candle = candles[idx];
-    const buy = filing.transaction_type.match(/ซื้อ|ได้มา|buy/i);
-    markers.push({
-      time: candle.time,
-      position: buy ? 'belowBar' : 'aboveBar',
-      color: buy ? '#10b981' : '#f43f5e',
-      shape: buy ? 'arrowUp' : 'arrowDown',
-      text: buy ? 'B' : 'S',
-    });
-  });
-
-  return markers.sort((a, b) => a.time.localeCompare(b.time));
-}

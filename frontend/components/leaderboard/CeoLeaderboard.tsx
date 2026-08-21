@@ -22,11 +22,11 @@ export default function CeoLeaderboard({
   return (
     <div>
       <div className="px-4 pt-5 pb-3">
-        <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-          Top 1Y Performance
+        <h2 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+          Top Insiders
         </h2>
-        <p className="text-[10px] text-slate-400 mt-0.5">
-          Mark-to-market return on each exec&apos;s own trades
+        <p className="text-[10px] text-slate-500 mt-0.5">
+          Mark-to-market return on each insider&apos;s own trades
         </p>
       </div>
 

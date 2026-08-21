@@ -45,7 +45,9 @@ export interface CeoScore {
   stock_1y_pct: number;
   buy_count: number;
   sell_count: number;
-  latest_action: 'BOUGHT' | 'SOLD';
+  /** Backend may add new values (e.g. TRANSFER) — consumers normalise, never
+   *  assume exhaustiveness. */
+  latest_action: 'BOUGHT' | 'SOLD' | 'TRANSFER' | (string & {});
   latest_volume_thb: number;
   latest_price: number;
   net_position_6m: 'LONG' | 'SHORT' | 'NEUTRAL';

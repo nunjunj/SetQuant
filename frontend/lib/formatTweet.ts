@@ -1,94 +1,180 @@
 import type { CeoScore } from './types';
 
+/** Normalised latest-action kinds. Anything the backend sends that we don't
+ *  recognise degrades to 'OTHER' rather than rendering a raw enum at the user. */
+export type LatestActionKind = 'BOUGHT' | 'SOLD' | 'TRANSFER' | 'OTHER';
+
+export type Tone = 'buy' | 'sell' | 'neutral';
+
+export interface ReturnStat {
+  pct: number;
+  count: number;
+}
+
+export interface LatestActionInfo {
+  kind: LatestActionKind;
+  /** "Latest Action" / "Today's Action" */
+  label: string;
+  /** Human verb: Bought / Sold / Transferred / Filed */
+  verb: string;
+  tone: Tone;
+  valueThb: number;
+  price: number;
+  dateLabel: string;
+}
+
+export interface NetPositionInfo {
+  direction: 'LONG' | 'SHORT' | 'NEUTRAL';
+  tone: Tone;
+  /** Always positive — the direction already carries the sign. */
+  valueThb: number;
+  avgPrice: number;
+  tradeCount: number;
+}
+
 export interface TweetContent {
   header: string;
-  roiLines: string[];
-  latestAction: string;
-  position6m: string | null;
-  stock1y: string;
-  comment: string;
+  tone: Tone;
+  /** Blended follower ROI over 1Y (fraction, e.g. 0.12 = +12%). */
+  followerRoiPct: number;
+  buyStat: ReturnStat | null;
+  sellStat: ReturnStat | null;
+  stock1yPct: number;
+  latest: LatestActionInfo;
+  net6m: NetPositionInfo | null;
+  disclaimerTh: string;
+  disclaimerEn: string;
 }
 
-function formatTHB(v: number): string {
+export function formatTweetTHB(v: number): string {
   const abs = Math.abs(v);
-  if (abs >= 1_000_000_000) return `${(v / 1_000_000_000).toFixed(1)}B THB`;
-  if (abs >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M THB`;
-  if (abs >= 1_000) return `${(v / 1_000).toFixed(1)}K THB`;
-  return `${v.toFixed(0)} THB`;
+  const sign = v < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}${(abs / 1_000_000_000).toFixed(1)}B THB`;
+  if (abs >= 1_000_000) return `${sign}${(abs / 1_000_000).toFixed(1)}M THB`;
+  if (abs >= 1_000) return `${sign}${(abs / 1_000).toFixed(1)}K THB`;
+  return `${sign}${abs.toFixed(0)} THB`;
 }
 
-function formatPct(v: number): string {
+export function formatTweetPct(v: number): string {
   const p = v * 100;
+  if (!Number.isFinite(p)) return '—';
   return `${p >= 0 ? '+' : ''}${p.toFixed(2)}%`;
 }
 
-function formatContextBlock(s: CeoScore): { latestAction: string; position6m: string | null } {
+/** "1 buy" / "3 buys" — the old copy said "1 buys". */
+export function pluralize(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function normalizeAction(raw: string | undefined | null): LatestActionKind {
+  const v = (raw ?? '').toUpperCase();
+  if (v === 'BOUGHT' || v === 'BUY') return 'BOUGHT';
+  if (v === 'SOLD' || v === 'SELL') return 'SOLD';
+  if (v === 'TRANSFER' || v === 'TRANSFERRED') return 'TRANSFER';
+  return 'OTHER';
+}
+
+const ACTION_VERB: Record<LatestActionKind, string> = {
+  BOUGHT: 'Bought',
+  SOLD: 'Sold',
+  TRANSFER: 'Transferred',
+  OTHER: 'Filed',
+};
+
+const ACTION_TONE: Record<LatestActionKind, Tone> = {
+  BOUGHT: 'buy',
+  SOLD: 'sell',
+  TRANSFER: 'neutral',
+  OTHER: 'neutral',
+};
+
+function buildLatest(s: CeoScore): LatestActionInfo {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
-  let dateStr = '?';
+  let dateLabel = '—';
   let isToday = false;
   if (s.latest_trade_date) {
     const tradeDay = new Date(s.latest_trade_date);
-    tradeDay.setHours(0, 0, 0, 0);
-    isToday = tradeDay.getTime() === today.getTime();
-    dateStr = tradeDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    if (!Number.isNaN(tradeDay.getTime())) {
+      tradeDay.setHours(0, 0, 0, 0);
+      isToday = tradeDay.getTime() === today.getTime();
+      dateLabel = tradeDay.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    }
   }
 
-  const label = isToday ? "Today's Action" : 'Latest Action';
-  const latestAction = `⚡ ${label}: ${s.latest_action} ${formatTHB(s.latest_volume_thb)} @ ${s.latest_price.toFixed(2)} THB (${dateStr})`;
+  const kind = normalizeAction(s.latest_action);
 
-  const position6m =
-    s.trade_count_6m >= 2
-      ? `⏳ 6M Net Position: ${s.net_position_6m} ${formatTHB(s.net_volume_thb_6m)} @ ${s.avg_price_6m.toFixed(2)} THB Avg`
-      : null;
-
-  return { latestAction, position6m };
+  return {
+    kind,
+    label: isToday ? "Today's Action" : 'Latest Action',
+    verb: ACTION_VERB[kind],
+    tone: ACTION_TONE[kind],
+    valueThb: s.latest_volume_thb,
+    price: s.latest_price,
+    dateLabel,
+  };
 }
 
-const COMMENT =
-  '🤖 SetQuant Insight: ผลตอบแทนโดยประมาณหากคุณจัดพอร์ตตามผู้บริหารท่านนี้ในช่วง 1 ปีที่ผ่านมา (Long เมื่อผู้บริหารซื้อ, Short เมื่อผู้บริหารขาย) เทียบกับการเติบโตของราคาหุ้น';
+function buildNet6m(s: CeoScore): NetPositionInfo | null {
+  if (s.trade_count_6m < 2) return null;
+  const direction =
+    s.net_position_6m === 'LONG' || s.net_position_6m === 'SHORT' ? s.net_position_6m : 'NEUTRAL';
+  return {
+    direction,
+    tone: direction === 'LONG' ? 'buy' : direction === 'SHORT' ? 'sell' : 'neutral',
+    // The LONG/SHORT label already carries direction — showing "SHORT -22.6M"
+    // double-negates it, so the magnitude is always absolute here.
+    valueThb: Math.abs(s.net_volume_thb_6m),
+    avgPrice: s.avg_price_6m,
+    tradeCount: s.trade_count_6m,
+  };
+}
+
+const DISCLAIMER_TH =
+  'ผลตอบแทนโดยประมาณหากคุณจัดพอร์ตตามผู้บริหารท่านนี้ในช่วง 1 ปีที่ผ่านมา (Long เมื่อผู้บริหารซื้อ, Short เมื่อผู้บริหารขาย) เทียบกับการเติบโตของราคาหุ้น';
+const DISCLAIMER_EN = 'Not investment advice.';
 
 export function formatTweetContent(score: CeoScore): TweetContent {
-  const { latestAction, position6m } = formatContextBlock(score);
-  const stock1y = `📊 $${score.symbol} Stock 1Y: ${formatPct(score.stock_1y_pct)}`;
+  const latest = buildLatest(score);
+  const net6m = buildNet6m(score);
+
+  const base = {
+    latest,
+    net6m,
+    stock1yPct: score.stock_1y_pct,
+    disclaimerTh: DISCLAIMER_TH,
+    disclaimerEn: DISCLAIMER_EN,
+  };
 
   if (score.sell_count === 0) {
     return {
+      ...base,
       header: 'INSIDER BUYING',
-      roiLines: [
-        `🎯 Follower ROI (1Y): ${formatPct(score.buy_return_pct)} (${score.buy_count} buys)`,
-      ],
-      latestAction,
-      position6m,
-      stock1y,
-      comment: COMMENT,
+      tone: 'buy',
+      followerRoiPct: score.buy_return_pct,
+      buyStat: { pct: score.buy_return_pct, count: score.buy_count },
+      sellStat: null,
     };
   }
 
   if (score.buy_count === 0) {
     return {
+      ...base,
       header: 'INSIDER SELLING',
-      roiLines: [
-        `🎯 Follower ROI (1Y): ${formatPct(score.sell_return_pct)} (${score.sell_count} sells)`,
-      ],
-      latestAction,
-      position6m,
-      stock1y,
-      comment: COMMENT,
+      tone: 'sell',
+      followerRoiPct: score.sell_return_pct,
+      buyStat: null,
+      sellStat: { pct: score.sell_return_pct, count: score.sell_count },
     };
   }
 
   return {
+    ...base,
     header: 'INSIDER ACTIVITY',
-    roiLines: [
-      `🎯 Follower ROI (1Y): ${formatPct(score.combined_return_pct)}`,
-      `├ 📈 Buy Return: ${formatPct(score.buy_return_pct)} (${score.buy_count} buys)`,
-      `└ 📉 Sell Return: ${formatPct(score.sell_return_pct)} (${score.sell_count} sells)`,
-    ],
-    latestAction,
-    position6m,
-    stock1y,
-    comment: COMMENT,
+    tone: 'neutral',
+    followerRoiPct: score.combined_return_pct,
+    buyStat: { pct: score.buy_return_pct, count: score.buy_count },
+    sellStat: { pct: score.sell_return_pct, count: score.sell_count },
   };
 }
