@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -84,13 +85,25 @@ func main() {
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
 
-	// CORS: allow the frontend origin (CORS_ORIGIN), defaulting to any in dev.
-	corsOrigin := os.Getenv("CORS_ORIGIN")
-	if corsOrigin == "" {
-		corsOrigin = "*"
+	// CORS: comma-separated origin allowlist via CORS_ORIGIN (e.g.
+	// "https://setquant.vercel.app,http://localhost:3000"); empty allows any
+	// origin, which is the right default for local dev.
+	allowedOrigins := map[string]bool{}
+	for _, o := range strings.Split(os.Getenv("CORS_ORIGIN"), ",") {
+		if o = strings.TrimSpace(o); o != "" {
+			allowedOrigins[o] = true
+		}
 	}
 	router.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", corsOrigin)
+		origin := c.GetHeader("Origin")
+		switch {
+		case len(allowedOrigins) == 0:
+			c.Header("Access-Control-Allow-Origin", "*")
+		case allowedOrigins[origin]:
+			// Echo only allowlisted origins; Vary keeps shared caches honest.
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		}
 		c.Header("Access-Control-Allow-Methods", "GET, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type")
 		if c.Request.Method == "OPTIONS" {
