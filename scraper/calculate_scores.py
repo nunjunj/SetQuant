@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 import numpy as np
 import yfinance as yf
@@ -6,8 +7,12 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine, text
 
 DB_URL = os.getenv("DATABASE_URL")
-if not DB_URL:
-    raise SystemExit("DATABASE_URL is not set. See .env.example.")
+
+
+def require_db_url():
+    if not DB_URL:
+        raise SystemExit("DATABASE_URL is not set. See .env.example.")
+    return DB_URL
 
 ENSURE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS ceo_scores (
@@ -69,9 +74,45 @@ UPSERT_SQL = text("""
         calculated_at       = EXCLUDED.calculated_at;
 """)
 
-# Thai SEC uses "ได้มา" (acquired/bought) and "จำหน่าย" (disposed/sold)
-BUY_PATTERN  = r'ซื้อ|ได้มา|buy'
-SELL_PATTERN = r'ขาย|จำหน่าย|sell'
+# Thai SEC uses "ได้มา" (acquired/bought) and "จำหน่าย" (disposed/sold).
+# Transfers ("โอน" / "รับโอน") are neither — they move shares without a market
+# trade, so they must never be scored as a buy or a sell.
+BUY_PATTERN      = r'ซื้อ|ได้มา|buy'
+SELL_PATTERN     = r'ขาย|จำหน่าย|sell'
+TRANSFER_PATTERN = r'โอน'
+
+BUY      = 'BUY'
+SELL     = 'SELL'
+OTHER    = 'OTHER'
+
+# Common shares. The raw feed also carries warrants, NVDR, futures etc., which
+# would otherwise be marked against the common-share price.
+COMMON_SHARE = 'หุ้นสามัญ'
+
+# Leaderboard eligibility thresholds.
+MIN_QUALIFYING_TRADES = 2
+MIN_TOTAL_NOTIONAL_THB = 100_000
+
+
+def classify_transaction(transaction_type) -> str:
+    """Three-valued classification of a filing's transaction type.
+
+    Transfers are checked first because "รับโอน" / "โอนออก" would otherwise be
+    swallowed by the buy/sell patterns. Classification is mutually exclusive:
+    a row is exactly one of BUY, SELL or OTHER.
+    """
+    if transaction_type is None:
+        return OTHER
+    text_value = str(transaction_type).strip()
+    if not text_value or text_value.lower() in ('nan', 'none'):
+        return OTHER
+    if re.search(TRANSFER_PATTERN, text_value):
+        return OTHER
+    if re.search(BUY_PATTERN, text_value, flags=re.IGNORECASE):
+        return BUY
+    if re.search(SELL_PATTERN, text_value, flags=re.IGNORECASE):
+        return SELL
+    return OTHER
 
 # SET50 constituents (reviewed semi-annually by SET in January and July)
 SET50 = {
@@ -86,18 +127,32 @@ SET50 = {
 
 def fetch_filings(engine) -> pd.DataFrame:
     df = pd.read_sql(
-        "SELECT symbol, name, transaction_type, trade_date, volume, price FROM sec_filings",
+        "SELECT symbol, name, security_type, transaction_type, trade_date, volume, price "
+        "FROM sec_filings",
         engine
     )
     df['trade_date'] = pd.to_datetime(df['trade_date'], utc=True).dt.tz_localize(None)
     df['thb_value'] = df['volume'] * df['price']
+
     before = len(df)
     df = df[df['symbol'].isin(SET50)]
     print(f"Filtered to SET50: {before} → {len(df)} filings.")
+
+    # Common shares only — warrants/NVDR/futures cannot be marked against the
+    # common-share price series.
+    before = len(df)
+    df = df[df['security_type'].astype(str).str.strip() == COMMON_SHARE]
+    print(f"Filtered to common shares ({COMMON_SHARE}): {before} → {len(df)} filings.")
+
     # drop empty (zero-volume) filings
     before = len(df)
     df = df[df['volume'] > 0]
     print(f"Dropped zero-volume filings: {before} → {len(df)} filings.")
+
+    df = df.copy()
+    df['action'] = df['transaction_type'].apply(classify_transaction)
+    counts = df['action'].value_counts().to_dict()
+    print(f"Classified transactions: {counts}")
     return df
 
 
@@ -172,10 +227,12 @@ def calc_mark_to_market(group: pd.DataFrame, close: pd.DataFrame, symbol: str) -
     """
     ticker = f"{symbol}.BK"
     cutoff = pd.Timestamp.now().normalize() - pd.Timedelta(days=365)
-    recent = group[group['trade_date'] >= cutoff]
+    # OTHER (transfers) never contribute to counts or mark-to-market math.
+    scoreable = group[group['action'].isin([BUY, SELL])]
+    recent = scoreable[scoreable['trade_date'] >= cutoff]
 
-    buys  = recent[recent['transaction_type'].str.contains(BUY_PATTERN,  case=False, na=False)]
-    sells = recent[recent['transaction_type'].str.contains(SELL_PATTERN, case=False, na=False)]
+    buys  = recent[recent['action'] == BUY]
+    sells = recent[recent['action'] == SELL]
 
     buy_count  = len(buys)
     sell_count = len(sells)
@@ -216,19 +273,21 @@ def calc_mark_to_market(group: pd.DataFrame, close: pd.DataFrame, symbol: str) -
 
     # Latest trade (all rows in group, not just 1Y window)
     latest_row = group.sort_values('trade_date').iloc[-1]
-    is_buy = bool(pd.Series([latest_row['transaction_type']]).str.contains(BUY_PATTERN, case=False, na=False).iloc[0])
-    latest_action     = 'BOUGHT' if is_buy else 'SOLD'
+    latest_action = {
+        BUY:  'BOUGHT',
+        SELL: 'SOLD',
+    }.get(latest_row['action'], 'TRANSFER')
     latest_volume_thb = float(latest_row['volume'] * latest_row['price'])
     latest_price      = float(latest_row['price'])
     latest_trade_date = latest_row['trade_date'].date()
 
     # 6-month net position (180-day window from full group)
     cutoff_6m  = pd.Timestamp.now().normalize() - pd.Timedelta(days=180)
-    window_6m  = group[group['trade_date'] >= cutoff_6m]
+    window_6m  = scoreable[scoreable['trade_date'] >= cutoff_6m]
     trade_count_6m = len(window_6m)
 
-    buys_6m  = window_6m[window_6m['transaction_type'].str.contains(BUY_PATTERN,  case=False, na=False)]
-    sells_6m = window_6m[window_6m['transaction_type'].str.contains(SELL_PATTERN, case=False, na=False)]
+    buys_6m  = window_6m[window_6m['action'] == BUY]
+    sells_6m = window_6m[window_6m['action'] == SELL]
 
     net_shares = buys_6m['volume'].sum() - sells_6m['volume'].sum()
 
@@ -267,6 +326,31 @@ def calc_mark_to_market(group: pd.DataFrame, close: pd.DataFrame, symbol: str) -
     }
 
 
+def qualifying_trades(group: pd.DataFrame) -> pd.DataFrame:
+    """Rows in the scoring window that count toward leaderboard eligibility.
+
+    Qualifying = BUY or SELL (transfers excluded), positive price and volume,
+    inside the trailing 365-day scoring window. Common-share filtering already
+    happened in fetch_filings.
+    """
+    cutoff = pd.Timestamp.now().normalize() - pd.Timedelta(days=365)
+    return group[
+        group['action'].isin([BUY, SELL])
+        & (group['trade_date'] >= cutoff)
+        & (group['volume'] > 0)
+        & (group['price'] > 0)
+    ]
+
+
+def is_eligible(group: pd.DataFrame) -> bool:
+    """>= 2 qualifying trades AND >= 100k THB notional in the scoring window."""
+    q = qualifying_trades(group)
+    if len(q) < MIN_QUALIFYING_TRADES:
+        return False
+    notional = float((q['volume'] * q['price']).sum())
+    return notional >= MIN_TOTAL_NOTIONAL_THB
+
+
 def filter_market_prices(df: pd.DataFrame, close: pd.DataFrame) -> pd.DataFrame:
     """Keep only filings priced within a sane band of the stock's traded range.
 
@@ -295,7 +379,7 @@ def filter_market_prices(df: pd.DataFrame, close: pd.DataFrame) -> pd.DataFrame:
 
 
 def main():
-    engine = create_engine(DB_URL)
+    engine = create_engine(require_db_url())
 
     # Drop stale columns from previous schema
     with engine.begin() as conn:
@@ -343,11 +427,18 @@ def main():
     # drop non-market-price filings before scoring
     df = filter_market_prices(df, close)
 
+    # Anything in ceo_scores not refreshed by this run is stale and gets removed.
+    run_started = datetime.now(timezone.utc)
+
     scores = []
+    skipped = 0
     groups = df.groupby(['name', 'symbol'])
     print(f"Calculating scores for {len(groups)} executive/symbol pairs...")
 
     for (name, symbol), group in groups:
+        if not is_eligible(group):
+            skipped += 1
+            continue
         metrics = calc_mark_to_market(group, close, symbol)
         scores.append({
             'name':   name,
@@ -356,8 +447,22 @@ def main():
             **metrics,
         })
 
+    print(
+        f"Eligible insiders: {len(scores)} "
+        f"(skipped {skipped} below {MIN_QUALIFYING_TRADES} trades / "
+        f"{MIN_TOTAL_NOTIONAL_THB:,.0f} THB notional)."
+    )
+
     with engine.begin() as conn:
-        conn.execute(UPSERT_SQL, scores)
+        if scores:
+            conn.execute(UPSERT_SQL, scores)
+        # Drop rows this run did not touch: insiders that fell out of SET50,
+        # became ineligible, or whose filings were reclassified as transfers.
+        deleted = conn.execute(
+            text("DELETE FROM ceo_scores WHERE calculated_at < :run_started"),
+            {"run_started": run_started},
+        )
+        print(f"Removed {deleted.rowcount} stale ceo_scores rows.")
     print(f"Upserted {len(scores)} scores. Done.")
 
 
