@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"os"
@@ -11,13 +12,19 @@ import (
 	"gorm.io/gorm"
 )
 
+// bangkokTZ is Thailand's fixed UTC+7 offset (no DST). Used wherever we need
+// "today" from Thailand's perspective — the SEC data and tweet cadence are
+// both Thailand-local, and comparing against time.Now().UTC() breaks in the
+// Bangkok evening (UTC has already rolled to the next day).
+var bangkokTZ = time.FixedZone("ICT", 7*3600)
+
 type SecFiling struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
-	Symbol          string    `json:"symbol"`
+	Symbol          string    `gorm:"index" json:"symbol"`
 	Name            string    `json:"name"`
 	Position        string    `json:"position"`
 	SecurityType    string    `json:"security_type"`
-	TradeDate       time.Time `json:"trade_date"`
+	TradeDate       time.Time `gorm:"index" json:"trade_date"`
 	Volume          int64     `json:"volume"`
 	Price           float64   `json:"price"`
 	TransactionType string    `json:"transaction_type"`
@@ -62,11 +69,17 @@ func initDB() {
 	if err != nil {
 		log.Fatal("Failed to connect to database:", err)
 	}
-	db.AutoMigrate(&SecFiling{}, &CeoScore{})
+	if err := db.AutoMigrate(&SecFiling{}, &CeoScore{}); err != nil {
+		log.Fatal("Failed to auto-migrate schema:", err)
+	}
 	log.Println("Connected to PostgreSQL")
 }
 
 func main() {
+	if os.Getenv("APP_ENV") == "prod" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	initDB()
 	router := gin.Default()
 	router.SetTrustedProxies(nil)
@@ -106,7 +119,8 @@ func main() {
 			tierLimit = 0 // ALL or invalid
 		}
 
-		q := db.Order("trade_date desc").Limit(50)
+		// `id desc` is a deterministic tiebreaker for rows sharing a trade_date.
+		q := db.Order("trade_date desc, id desc").Limit(50)
 		if tierLimit > 0 {
 			// `id asc` is a deterministic tiebreaker — without it, two scores tied
 			// at the boundary could shuffle the subquery's result set per call.
@@ -119,7 +133,8 @@ func main() {
 
 		var transactions []SecFiling
 		if result := q.Find(&transactions); result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			log.Printf("❌ /api/v1/updates query failed: %v", result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		c.JSON(http.StatusOK, transactions)
@@ -131,7 +146,8 @@ func main() {
 		result := db.Where("symbol = ?", symbol).Order("trade_date desc").Find(&transactions)
 
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			log.Printf("❌ /api/v1/stock/%s query failed: %v", symbol, result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		c.JSON(http.StatusOK, transactions)
@@ -139,9 +155,12 @@ func main() {
 
 	router.GET("/api/v1/scores", func(c *gin.Context) {
 		var scores []CeoScore
-		result := db.Order("combined_return_pct desc").Find(&scores)
+		// `id asc` is a deterministic tiebreaker — without it, rows tied at the
+		// same combined_return_pct could reorder between calls.
+		result := db.Order("combined_return_pct desc, id asc").Find(&scores)
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			log.Printf("❌ /api/v1/scores query failed: %v", result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		c.JSON(http.StatusOK, scores)
@@ -152,7 +171,8 @@ func main() {
 		var scores []CeoScore
 		result := db.Where("symbol = ?", symbol).Order("combined_return_pct desc").Find(&scores)
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			log.Printf("❌ /api/v1/scores/%s query failed: %v", symbol, result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		c.JSON(http.StatusOK, scores)
@@ -163,7 +183,8 @@ func main() {
 		var scores []CeoScore
 		result := db.Where("symbol = ?", symbol).Order("combined_return_pct desc").Find(&scores)
 		if result.Error != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			log.Printf("❌ /api/v1/tweet/%s query failed: %v", symbol, result.Error)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		type TweetResponse struct {
@@ -191,7 +212,7 @@ func main() {
 
 	router.POST("/api/internal/trigger-daily-tweet", func(c *gin.Context) {
 		incoming := c.GetHeader("X-SetQuant-Secret")
-		if incoming == "" || incoming != webhookSecret {
+		if incoming == "" || subtle.ConstantTimeCompare([]byte(incoming), []byte(webhookSecret)) != 1 {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized"})
 			return
 		}
@@ -205,7 +226,7 @@ func main() {
 			return
 		}
 
-		today := time.Now().UTC().Format("2006-01-02")
+		today := time.Now().In(bangkokTZ).Format("2006-01-02")
 		if isTestRun {
 			today = dateOverride
 			log.Printf("🧪 [TEST] Date override: querying for %s", today)
@@ -215,7 +236,7 @@ func main() {
 		result := db.Where("latest_trade_date = ?", today).Find(&scores)
 		if result.Error != nil {
 			log.Printf("❌ DB query failed: %v", result.Error)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 
@@ -249,7 +270,8 @@ func main() {
 			return
 		}
 		if err := PostTweet("🧪 SetQuant test tweet — ignore"); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			log.Printf("❌ test-tweet post failed: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"status": "posted"})

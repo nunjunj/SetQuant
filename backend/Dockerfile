@@ -16,6 +16,8 @@ RUN go build -o server .
 # 2. Run Stage (Tiny image for production)
 FROM alpine:latest
 
+RUN apk add --no-cache ca-certificates
+
 WORKDIR /root/
 
 # Copy the binary from the builder stage
@@ -23,5 +25,7 @@ COPY --from=builder /app/server .
 
 # Expose port 8080
 EXPOSE 8080
+
+ENV GIN_MODE=release
 
 CMD ["./server"]

@@ -37,11 +37,15 @@ func formatPct(v float64) string {
 }
 
 func formatContextBlock(s CeoScore) string {
-	today := time.Now().UTC().Truncate(24 * time.Hour)
-	tradeDay := s.LatestTradeDate.UTC().Truncate(24 * time.Hour)
+	// Compare calendar dates (not Truncate — it rounds by absolute duration
+	// since the zero time, ignoring Location, so it can't shift a day
+	// boundary into Bangkok's UTC+7). Format to a date string instead.
+	const dateLayout = "2006-01-02"
+	today := time.Now().In(bangkokTZ).Format(dateLayout)
+	tradeDay := s.LatestTradeDate.In(bangkokTZ).Format(dateLayout)
 
 	label := "Latest Action"
-	if tradeDay.Equal(today) {
+	if tradeDay == today {
 		label = "Today's Action"
 	}
 	var dateStr string
